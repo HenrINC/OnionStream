@@ -98,7 +98,7 @@ class Encoder:
         cipher = AES.new(key.bytes, AES.MODE_CBC, key.salt)
         encrypted_segment = cipher.encrypt(pad(segment, AES.block_size))
         encryption_logger.debug(f"Sending segment of size {len(encrypted_segment)}")
-        return b"\n".join([key.hash.encode(), iv, encrypted_segment])
+        return b"\n".join([key.hash.encode(), iv, segment])
 
     @classmethod
     @property

@@ -142,7 +142,7 @@ class Playlist(BaseModel):
         ]
         for segment in self.segments:
             lines += [
-                f'#EXT-X-KEY:METHOD=AES-128,URI="key.bin?key_hash={segment.encryption_key.hash}",IV=0x{segment.iv.decode()}'.encode(),
+                # f'#EXT-X-KEY:METHOD=AES-128,URI="key.bin?key_hash={segment.encryption_key.hash}",IV=0x{segment.iv.decode()}'.encode(),
                 f"#EXTINF:{segment.duration},".encode(),
                 f"segment.ts?uuid={segment.uid}&key_hash={segment.encryption_key.hash}".encode(),
             ]
