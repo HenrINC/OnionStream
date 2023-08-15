@@ -38,4 +38,4 @@ async def key(request: EncryptionKeyRequest = Depends()):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8888)
+    uvicorn.run(app, host="127.0.0.1", port=8888, timeout_keep_alive=60)
