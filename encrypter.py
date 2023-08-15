@@ -10,11 +10,13 @@ from Crypto.Random import get_random_bytes
 from lib.handle_crash import handle
 from lib.structs import EncryptionKey
 from lib.connector import SubscriptionClient, SubscriptionServer
+from lib.constants import DEFAULT_ENCRYPTION_KEY_ROTATION_INTERVAL
 
 encryption_logger = logging.getLogger("EncryptionLogger")
 encryption_logger.setLevel(logging.DEBUG)
 encryption_logger.addHandler(logging.StreamHandler())
 encryption_logger.debug("EncryptionLogger initialized")
+
 
 class KeyChain:
     def __init__(self, pepper: Optional[bytes] = None, key_rotation_interval: int = 60):
@@ -73,7 +75,9 @@ class KeyChain:
 
 
 class Encoder:
-    _keychain: KeyChain = KeyChain()
+    _keychain: KeyChain = KeyChain(
+        key_rotation_interval=DEFAULT_ENCRYPTION_KEY_ROTATION_INTERVAL
+    )
 
     def __init__(self, subscription_client: SubscriptionClient, **kwargs):
         self.subscription_client: SubscriptionClient = subscription_client
@@ -94,11 +98,11 @@ class Encoder:
         segment = await self.transcoding_iterator.__anext__()
         encryption_logger.debug(f"Encrypting segment of size {len(segment)}")
         key = self._keychain.get_latest_key()
-        iv = get_random_bytes(16).hex().encode()
+        iv = get_random_bytes(16)
         cipher = AES.new(key.bytes, AES.MODE_CBC, key.salt)
         encrypted_segment = cipher.encrypt(pad(segment, AES.block_size))
         encryption_logger.debug(f"Sending segment of size {len(encrypted_segment)}")
-        return b"\n".join([key.hash.encode(), iv, segment])
+        return b"\n".join([key.hash.encode(), iv, encrypted_segment])
 
     @classmethod
     @property
