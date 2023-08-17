@@ -10,7 +10,7 @@ from Crypto.Random import get_random_bytes
 from lib.handle_crash import handle
 from lib.structs import EncryptionKey
 from lib.connector import SubscriptionClient, SubscriptionServer
-from lib.constants import DEFAULT_ENCRYPTION_KEY_ROTATION_INTERVAL
+from lib.constants import DEFAULT_ENCRYPTION_KEY_ROTATION_INTERVAL, DEBUG_FORCE_IV
 
 encryption_logger = logging.getLogger("EncryptionLogger")
 encryption_logger.setLevel(logging.DEBUG)
@@ -98,7 +98,7 @@ class Encoder:
         segment = await self.transcoding_iterator.__anext__()
         encryption_logger.debug(f"Encrypting segment of size {len(segment)}")
         key = self._keychain.get_latest_key()
-        iv = get_random_bytes(16)
+        iv = DEBUG_FORCE_IV or get_random_bytes(16)
         cipher = AES.new(key.bytes, AES.MODE_CBC, key.salt)
         encrypted_segment = cipher.encrypt(pad(segment, AES.block_size))
         encryption_logger.debug(f"Sending segment of size {len(encrypted_segment)}")

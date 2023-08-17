@@ -16,12 +16,18 @@ from .structs import (
     EncryptionKey,
     EncryptionKeyRequest,
 )
-from .constants import DEFAULT_HLS_SEGMENT_DURATION, DEFAULT_HLS_PLAYLIST_LENGTH
+from .constants import DEFAULT_HLS_SEGMENT_DURATION, DEFAULT_HLS_PLAYLIST_LENGTH, DEBUG_FORCE_IV, DEBUG_SHOW_KEY
 
 manager_logger = logging.getLogger("ManagerLogger")
 manager_logger.setLevel(logging.DEBUG)
 manager_logger.addHandler(logging.StreamHandler())
 manager_logger.debug("ManagerLogger initialized")
+
+if DEBUG_FORCE_IV:
+    manager_logger.warning("IVs are being forced, this is not secure at all")
+
+if DEBUG_SHOW_KEY:
+    manager_logger.warning("Keys are being shown, this is not secure at all")
 
 
 class ContentManager:
