@@ -37,7 +37,7 @@ class Transcoder:
         )
         self.restreaming_settings = {k: kwargs[k] for k in restreaming_args}
         command = ["ffmpeg", "-loglevel", "warning", "-i", "pipe:0"]
-        for key, value in transcoding_settings.dict().items():
+        for key, value in transcoding_settings.dict(exclude_none=True).items():
             if value is not None:
                 # Convert Python-style variable names to ffmpeg-style command line arguments
                 ffmpeg_arg = "-" + key.replace("__", ":")
