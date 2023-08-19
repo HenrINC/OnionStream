@@ -11,7 +11,15 @@ from Crypto.Random import get_random_bytes
 
 from lib.structs import EncryptionKey
 from lib.connector import SubscriptionClient, SubscriptionServer
-from lib.constants import DEFAULT_ENCRYPTION_KEY_ROTATION_INTERVAL, DEBUG_FORCE_IV, TRANSCODER_HOST, TRANSCODER_PORT, ENCODER_PORT, DEFAULT_LOG_LEVEL
+from lib.constants import (
+    DEFAULT_ENCRYPTION_KEY_ROTATION_INTERVAL,
+    DEBUG_FORCE_IV,
+    TRANSCODER_HOST,
+    TRANSCODER_PORT,
+    ENCODER_PORT,
+    DEFAULT_LOG_LEVEL,
+    POST_MORTEM_DEBUGGER,
+)
 
 transcoder_host = os.environ.get("TRANSCODER_HOST", TRANSCODER_HOST)
 transcoder_port = os.environ.get("TRANSCODER_PORT", TRANSCODER_PORT)
@@ -108,7 +116,9 @@ class Encoder:
         cipher = AES.new(key.bytes, AES.MODE_CBC, key.salt)
         encrypted_segment = cipher.encrypt(pad(segment, AES.block_size))
         encryption_logger.debug(f"Sending segment of size {len(encrypted_segment)}")
-        return b"\n".join(base64.b64encode(i) for i in [key.hash.encode(), iv, encrypted_segment])
+        return b"\n".join(
+            base64.b64encode(i) for i in [key.hash.encode(), iv, encrypted_segment]
+        )
 
     @classmethod
     @property
@@ -146,4 +156,10 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except:
+        if POST_MORTEM_DEBUGGER:
+            import pdb
+
+            pdb.post_mortem()

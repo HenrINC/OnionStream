@@ -1,0 +1,13 @@
+[HTTP Server]
+type = http
+host = ${WEBSERVER_HOST}
+port = ${WEBSERVER_PORT}
+keys = webserver-keys.dat
+inport = ${WEBSERVER_INPORT}
+
+[API Server]
+type = http
+host = ${API_HOST}
+port = ${API_PORT}
+keys = api-keys.dat
+inport = ${API_INPORT}

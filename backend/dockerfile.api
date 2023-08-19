@@ -1,0 +1,13 @@
+FROM python:3.11-slim-bookworm
+
+RUN useradd -m runner
+USER runner
+
+RUN pip3 install --upgrade pip \
+    && pip3 install --upgrade pydantic fastapi uvicorn
+
+COPY ./lib /app/lib
+COPY encoder.py /app
+
+WORKDIR /app
+CMD python3 encoder.py

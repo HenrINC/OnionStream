@@ -5,7 +5,13 @@ import os
 
 from lib.structs import TranscodingSettings
 from lib.connector import SubscriptionClient, SubscriptionServer
-from lib.constants import RESTREAMER_HOST, RESTREAMER_PORT, TRANSCODER_PORT, DEFAULT_LOG_LEVEL
+from lib.constants import (
+    RESTREAMER_HOST,
+    RESTREAMER_PORT,
+    TRANSCODER_PORT,
+    DEFAULT_LOG_LEVEL,
+    POST_MORTEM_DEBUGGER,
+)
 
 restreamer_host = os.environ.get("RESTREAMER_HOST", RESTREAMER_HOST)
 restreamer_port = os.environ.get("RESTREAMER_PORT", RESTREAMER_PORT)
@@ -100,4 +106,10 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except:
+        if POST_MORTEM_DEBUGGER:
+            import pdb
+
+            pdb.post_mortem()

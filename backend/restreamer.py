@@ -5,11 +5,12 @@ import time
 import os
 
 from lib.connector import SubscriptionServer
-from lib.constants import RESTREAMER_PORT, DEFAULT_LOG_LEVEL
+from lib.constants import RESTREAMER_PORT, DEFAULT_LOG_LEVEL, POST_MORTEM_DEBUGGER
 
 restreamer_port = os.environ.get("RESTREAMER_PORT", RESTREAMER_PORT)
 log_level = os.environ.get("LOG_LEVEL", DEFAULT_LOG_LEVEL)
 logging.getLogger("ConnectionLogger").setLevel(log_level)
+
 
 class Restreamer:
     def __init__(self, source: str, segment_duration: Union[str, int] = 5, **kwargs):
@@ -66,5 +67,12 @@ async def main():
     server = RestreamingServer("0.0.0.0", restreamer_port)
     await server.run()
 
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except:
+        if POST_MORTEM_DEBUGGER:
+            import pdb
+
+            pdb.post_mortem()

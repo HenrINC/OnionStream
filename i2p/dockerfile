@@ -1,0 +1,24 @@
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y wget gnupg gettext apt-transport-https \
+    && wget -q -O- https://repo.i2pd.xyz/r4sas.gpg | gpg --dearmor > /usr/share/keyrings/purplei2p.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/purplei2p.gpg] https://repo.i2pd.xyz/debian bookworm main" > /etc/apt/sources.list.d/purplei2p.list \
+    && echo "# deb-src [signed-by=/usr/share/keyrings/purplei2p.gpg] https://repo.i2pd.xyz/debian bookworm main" >> /etc/apt/sources.list.d/purplei2p.list \
+    && apt-get update \
+    && apt-get install -y i2pd
+
+COPY i2p.conf /i2p/i2p.conf
+COPY main.sh /i2p/main.sh
+COPY tunels.conf.template /i2p/tunels.conf.template
+
+WORKDIR /i2p
+
+RUN chmod +x main.sh \
+    && chown -R i2pd:i2pd /i2p
+
+USER i2pd
+
+CMD ./main.sh

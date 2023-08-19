@@ -1,0 +1,109 @@
+version: '3.4'  
+x-common-environment: &common-environment
+  MAX_BANDWIDTH: 300000
+  DEBUG_LEVEL: 0
+  LOG_LEVEL: WARNING
+
+services:
+  transcoder:
+    build:
+      context: backend
+      dockerfile: dockerfile.transcoder
+    networks:
+      - transcoder_network
+    hostname: transcoder
+    environment:
+      <<: *common-environment
+      RESTREAMER_HOST: host.docker.internal
+      RESTREAMER_PORT: 8080
+      TRANSCODER_PORT: 8081
+  
+  encoder:
+    build:
+      context: backend
+      dockerfile: dockerfile.encoder
+    networks:
+      - transcoder_network
+      - encoder_network
+    hostname: encoder
+    environment:
+      <<: *common-environment
+      TRANSCODER_HOST: transcoder
+      TRANSCODER_PORT: 8081
+      ENCODER_PORT: 8082
+  
+  api:
+    build:
+      context: backend
+      dockerfile: dockerfile.api
+    networks:
+      - encoder_network
+      - api_network
+    hostname: api
+    environment:
+      <<: *common-environment
+      ENCODER_HOST: encoder
+      ENCODER_PORT: 8082
+      API_PORT: 8083
+  
+  # webserver:
+  #   build:
+  #     context: webserver
+  #     dockerfile: dockerfile
+  #   networks:
+  #     - webserver_network
+  #   hostname: webserver
+  #   environment:
+  #     <<: *common-environment
+  #     WEBSERVER_PORT: 8084
+  
+  tor_proxy:
+    build:
+      context: tor
+      dockerfile: dockerfile.proxy
+    networks:
+      - webserver_network
+      - api_network
+    environment:
+      <<: *common-environment
+      API_HOST: api
+      API_PORT: 8083
+      API_INPORT: 8888
+      WEBSERVER_HOST: webserver
+      WEBSERVER_PORT: 8084
+      WEBSERVER_INPORT: 80
+      LOG_ADDRESS: true
+  
+  # tor_relay:
+  #   build: 
+  #     context: tor
+  #     dockerfile: dockerfile.relay
+  #   environment:
+  #     <<: *common-environment
+  
+  i2p:
+    build:
+      context: i2p
+      dockerfile: dockerfile
+    networks:
+      - webserver_network
+      - api_network
+    environment:
+      <<: *common-environment
+      API_HOST: api
+      API_PORT: 8083
+      API_INPORT: 8888
+      WEBSERVER_HOST: webserver
+      WEBSERVER_PORT: 8084
+      WEBSERVER_INPORT: 80
+      LOG_ADDRESS: true
+
+networks:
+  transcoder_network:
+    driver: bridge
+  encoder_network:
+    driver: bridge
+  api_network:
+    driver: bridge
+  webserver_network:
+    driver: bridge
