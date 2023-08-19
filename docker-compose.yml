@@ -31,7 +31,9 @@ services:
       TRANSCODER_HOST: transcoder
       TRANSCODER_PORT: 8081
       ENCODER_PORT: 8082
-  
+    depends_on:
+      - transcoder
+
   api:
     build:
       context: backend
@@ -45,17 +47,19 @@ services:
       ENCODER_HOST: encoder
       ENCODER_PORT: 8082
       API_PORT: 8083
+    depends_on:
+      - encoder
   
-  # webserver:
-  #   build:
-  #     context: webserver
-  #     dockerfile: dockerfile
-  #   networks:
-  #     - webserver_network
-  #   hostname: webserver
-  #   environment:
-  #     <<: *common-environment
-  #     WEBSERVER_PORT: 8084
+  webserver:
+    build:
+      context: webserver
+      dockerfile: dockerfile
+    networks:
+      - webserver_network
+    hostname: webserver
+    environment:
+      <<: *common-environment
+      WEBSERVER_PORT: 8084
   
   tor_proxy:
     build:
@@ -73,6 +77,10 @@ services:
       WEBSERVER_PORT: 8084
       WEBSERVER_INPORT: 80
       LOG_ADDRESS: true
+    depends_on:
+      - webserver
+      - api
+
   
   # tor_relay:
   #   build: 
@@ -97,6 +105,9 @@ services:
       WEBSERVER_PORT: 8084
       WEBSERVER_INPORT: 80
       LOG_ADDRESS: true
+    depends_on:
+      - webserver
+      - api
 
 networks:
   transcoder_network:
