@@ -10,7 +10,7 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y i2pd
 
-COPY i2p.conf /i2p/i2p.conf
+COPY i2pd.conf /i2p/i2pd.conf
 COPY main.sh /i2p/main.sh
 COPY tunnels.conf.template /i2p/tunnels.conf.template
 
@@ -18,7 +18,7 @@ WORKDIR /i2p
 
 RUN dos2unix ./main.sh \
     && dos2unix ./tunnels.conf.template \
-    && dos2unix ./i2p.conf
+    && dos2unix ./i2pd.conf
 
 RUN chmod +x main.sh \
     && chown -R i2pd:i2pd /i2p
