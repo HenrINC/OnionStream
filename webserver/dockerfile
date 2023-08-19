@@ -1,0 +1,12 @@
+FROM python:3.11-slim-bookworm
+
+RUN useradd -m runner
+USER runner
+
+RUN pip3 install --upgrade pip \
+    && pip3 install --upgrade fastapi uvicorn
+
+COPY webserver.py /app/webserver.py
+
+WORKDIR /app
+CMD python3 webserver.py
