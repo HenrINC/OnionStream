@@ -1,19 +1,25 @@
 from typing import AsyncIterator, Awaitable, Union, Optional
 import logging
 import asyncio
+import base64
 import time
+import os
 
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from Crypto.Random import get_random_bytes
 
-from lib.handle_crash import handle
 from lib.structs import EncryptionKey
 from lib.connector import SubscriptionClient, SubscriptionServer
-from lib.constants import DEFAULT_ENCRYPTION_KEY_ROTATION_INTERVAL, DEBUG_FORCE_IV
+from lib.constants import DEFAULT_ENCRYPTION_KEY_ROTATION_INTERVAL, DEBUG_FORCE_IV, TRANSCODER_HOST, TRANSCODER_PORT, ENCODER_PORT, DEFAULT_LOG_LEVEL
+
+transcoder_host = os.environ.get("TRANSCODER_HOST", TRANSCODER_HOST)
+transcoder_port = os.environ.get("TRANSCODER_PORT", TRANSCODER_PORT)
+encoder_port = os.environ.get("ENCODER_PORT", ENCODER_PORT)
+log_level = os.environ.get("LOG_LEVEL", DEFAULT_LOG_LEVEL)
 
 encryption_logger = logging.getLogger("EncryptionLogger")
-encryption_logger.setLevel(logging.DEBUG)
+encryption_logger.setLevel(log_level)
 encryption_logger.addHandler(logging.StreamHandler())
 encryption_logger.debug("EncryptionLogger initialized")
 
@@ -102,7 +108,7 @@ class Encoder:
         cipher = AES.new(key.bytes, AES.MODE_CBC, key.salt)
         encrypted_segment = cipher.encrypt(pad(segment, AES.block_size))
         encryption_logger.debug(f"Sending segment of size {len(encrypted_segment)}")
-        return b"\n".join([key.hash.encode(), iv, encrypted_segment])
+        return b"\n".join(base64.b64encode(i) for i in [key.hash.encode(), iv, encrypted_segment])
 
     @classmethod
     @property
@@ -130,17 +136,14 @@ class EncryptionServer(SubscriptionServer):
 
 
 async def run(client: SubscriptionClient):
-    server = EncryptionServer("0.0.0.0", 8082, subscription_client=client)
+    server = EncryptionServer("0.0.0.0", encoder_port, subscription_client=client)
     await server.run()
 
 
 async def main():
-    client = SubscriptionClient("127.0.0.1", 8081)
+    client = SubscriptionClient(transcoder_host, transcoder_port)
     await client.run(run)
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except:
-        asyncio.run(handle())
+    asyncio.run(main())

@@ -2,11 +2,14 @@ from typing import AsyncIterator, Awaitable, Union
 import logging
 import asyncio
 import time
+import os
 
-from lib.handle_crash import handle
 from lib.connector import SubscriptionServer
+from lib.constants import RESTREAMER_PORT, DEFAULT_LOG_LEVEL
 
-logging.getLogger("ConnectionLogger").setLevel(logging.INFO)
+restreamer_port = os.environ.get("RESTREAMER_PORT", RESTREAMER_PORT)
+log_level = os.environ.get("LOG_LEVEL", DEFAULT_LOG_LEVEL)
+logging.getLogger("ConnectionLogger").setLevel(log_level)
 
 class Restreamer:
     def __init__(self, source: str, segment_duration: Union[str, int] = 5, **kwargs):
@@ -60,11 +63,8 @@ class RestreamingServer(SubscriptionServer):
 
 
 async def main():
-    server = RestreamingServer("0.0.0.0", 8080)
+    server = RestreamingServer("0.0.0.0", restreamer_port)
     await server.run()
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except:
-        asyncio.run(handle())
+    asyncio.run(main())

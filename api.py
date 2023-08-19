@@ -1,5 +1,6 @@
 from typing import AsyncIterator, Awaitable, Union, Optional
 import asyncio
+import os
 
 from fastapi import FastAPI, Depends, Query
 from fastapi.responses import Response
@@ -7,13 +8,17 @@ import uvicorn
 
 from lib.content_manager import ContentManager
 from lib.structs import SegmentRequest, PlaylistRequest, EncryptionKeyRequest
-from lib.constants import SERVER_NAME
+from lib.constants import SERVER_NAME, ENCODER_HOST, ENCODER_PORT, API_PORT
 
 app = FastAPI()
 base_headers = {
     "Server": SERVER_NAME,
 }
-content_manager = ContentManager("127.0.0.1", 8082)
+
+encoder_host = os.environ.get("ENCODER_HOST", ENCODER_HOST)
+encoder_port = os.environ.get("ENCODER_PORT", ENCODER_PORT)
+api_port = os.environ.get("API_PORT", API_PORT)
+content_manager = ContentManager(encoder_host, encoder_port)
 
 @app.on_event("startup")
 async def startup_event():
@@ -38,4 +43,4 @@ async def key(request: EncryptionKeyRequest = Depends()):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8888, timeout_keep_alive=60)
+    uvicorn.run(app, host="0.0.0.0", port=api_port, timeout_keep_alive=60)

@@ -1,6 +1,7 @@
 from uuid import uuid4
 import asyncio
 import logging
+import base64
 
 from .connector import (
     SubscriptionClient,
@@ -16,7 +17,14 @@ from .structs import (
     EncryptionKey,
     EncryptionKeyRequest,
 )
-from .constants import DEFAULT_HLS_SEGMENT_DURATION, DEFAULT_HLS_PLAYLIST_LENGTH, DEBUG_FORCE_IV, DEBUG_SHOW_KEY
+from .constants import (
+    DEFAULT_HLS_SEGMENT_DURATION,
+    DEFAULT_HLS_PLAYLIST_LENGTH,
+    DEBUG_FORCE_IV,
+    DEBUG_SHOW_KEY,
+    MAX_KEY_RETRY,
+    KEY_RETRY_TIMEOUT,
+)
 
 manager_logger = logging.getLogger("ManagerLogger")
 manager_logger.setLevel(logging.DEBUG)
@@ -77,18 +85,25 @@ class ContentManager:
 
     async def handle_segment(self, data_setter: DataSetter, segment: bytes):
         mutable_identifier: dict = data_setter._mutable_identifier
-        imutable_identifier: frozenset = IdentifiableSingleton.get_imutable_identifier(mutable_identifier)
+        imutable_identifier: frozenset = IdentifiableSingleton.get_imutable_identifier(
+            mutable_identifier
+        )
         if imutable_identifier not in self.subscriptions:
             self.subscriptions[imutable_identifier] = []
         mutable_identifier: dict = data_setter._mutable_identifier
-        key_hash, iv, encrypted_segment = segment.split(b"\n", 2)
+        key_hash, iv, encrypted_segment = [base64.b64decode(i) for i in segment.split(b"\n", 2)]
         manager_logger.debug(f"Received segment {mutable_identifier}")
         manager_logger.debug(f"IV: {iv}")
         manager_logger.debug(f"Key hash: {key_hash}")
         manager_logger.debug(f"Segment_size:  {len(encrypted_segment)}")
-        key = await self.get_key(EncryptionKeyRequest(key_hash=key_hash.decode()))
+        try:
+            key = await self._get_key(key_hash=key_hash.decode())
+        except:
+            breakpoint()
+            raise
         media_sequence = (
-            self.segments[self.subscriptions[imutable_identifier][-1]].media_sequence + 1
+            self.segments[self.subscriptions[imutable_identifier][-1]].media_sequence
+            + 1
             if self.subscriptions[imutable_identifier]
             else 1
         )
@@ -100,10 +115,10 @@ class ContentManager:
             iv=iv,
             media_sequence=media_sequence,
             bytes=encrypted_segment,
-            
         )
         self.segments[segment_uid] = segment
         self.subscriptions[imutable_identifier].append(segment_uid)
+        manager_logger.debug(f"Add segment to playlist {imutable_identifier}")
         await self.clean_subscription(imutable_identifier)
 
     async def clean_subscription(self, imutable_identifier: frozenset):
@@ -114,18 +129,19 @@ class ContentManager:
             del self.segments[uuid]
 
     async def get_key(self, request: EncryptionKeyRequest) -> EncryptionKey:
-        key_hash: str = request.key_hash
-        return await self._get_key(key_hash)
+        return await self._get_key(key_hash=request.key_hash)
 
     async def _get_key(self, key_hash: str) -> EncryptionKey:
         manager_logger.debug(f"Getting key with hash {key_hash}")
-        if not self.keys:
-            manager_logger.debug("No keys found, waiting for 5 seconds")
-            await asyncio.sleep(5)
-        for key in self.keys:
-            manager_logger.debug(f"Key hash: {key.hash}")
-            if key.hash == key_hash:
-                return key
+        for i in range(MAX_KEY_RETRY):
+            for key in self.keys:
+                manager_logger.debug(f"Key hash: {key.hash}")
+                if key.hash == key_hash:
+                    return key
+            manager_logger.warning(
+                f"Could not find key {key_hash}, retrying in {KEY_RETRY_TIMEOUT} seconds"
+            )
+            await asyncio.sleep(KEY_RETRY_TIMEOUT)
         raise KeyError(f"Key with hash {key_hash} not found")
 
     async def run_forever(self):
