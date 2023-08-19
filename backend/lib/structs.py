@@ -86,7 +86,7 @@ class EncryptionKey(BaseModel):
     salt: bytes
     bytes: bytes
     hash: str
-    creation_time: int | float
+    creation_time: float
     ttl: int
 
     def to_bytes(self) -> bytes:
@@ -94,11 +94,12 @@ class EncryptionKey(BaseModel):
             bytes: lambda x: x,
             str: lambda x: x.encode(),
             int: lambda x: str(x).encode(),
+            float: lambda x: str(x).encode(),
         }
         return b"\n".join(
             [
                 k.encode() + b":" + base64.b64encode(conversion[type(v)](v))
-                for k, v in self.dict().items()
+                for k, v in self.model_dump().items()
             ]
         )
 
@@ -108,6 +109,7 @@ class EncryptionKey(BaseModel):
             bytes: lambda x: x,
             str: lambda x: x.decode(),
             int: lambda x: int(x.decode()),
+            float: lambda x: float(x.decode()),
         }
         types_hints = get_type_hints(cls)
         try:

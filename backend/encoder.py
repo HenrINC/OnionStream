@@ -46,7 +46,7 @@ class KeyChain:
             salt=salt,
             bytes=key_bytes,
             hash=str(hash(self.pepper + key_bytes + salt)).encode().hex(),
-            creation_time=time.time(),
+            creation_time=float(time.time()),
             ttl=self.key_rotation_interval * 2,
         )
         self.keys.append(key)
