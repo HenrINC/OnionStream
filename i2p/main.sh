@@ -2,7 +2,7 @@
 
 envsubst < /i2p/tunnels.conf.template > /i2p/tunnels.conf
 
-i2pd --conf=/i2p/i2pd.conf --daemon
+i2pd --loglevel=error --tunconf=/i2p/tunnels.conf&
 
 while [ ! -f /i2p/webserver-keys.dat ] || [ ! -f /i2p/api-keys.dat ]; do
     sleep 1
