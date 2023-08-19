@@ -1,3 +1,4 @@
+import base64
 from typing import Union, Optional, get_type_hints
 
 from pydantic import BaseModel, validator
@@ -95,7 +96,10 @@ class EncryptionKey(BaseModel):
             int: lambda x: str(x).encode(),
         }
         return b"\n".join(
-            [k.encode() + b":" + conversion[type(v)](v) for k, v in self.dict().items()]
+            [
+                k.encode() + b":" + base64.b64encode(conversion[type(v)](v))
+                for k, v in self.dict().items()
+            ]
         )
 
     @classmethod
@@ -106,12 +110,16 @@ class EncryptionKey(BaseModel):
             int: lambda x: int(x.decode()),
         }
         types_hints = get_type_hints(cls)
-        return cls(
-            **{
-                k.decode(): conversion[types_hints[k.decode()]](v)
-                for k, v in [line.split(b":", 1) for line in data.split(b"\n")]
-            }
-        )
+        try:
+            return cls(
+                **{
+                    k.decode(): conversion[types_hints[k.decode()]](base64.b64decode(v))
+                    for k, v in [line.split(b":", 1) for line in data.split(b"\n")]
+                }
+            )
+        except ValueError:
+            breakpoint()
+            raise
 
 
 class Segment(BaseModel):
@@ -142,7 +150,7 @@ class Playlist(BaseModel):
         ]
         for segment in self.segments:
             lines += [
-                f'#EXT-X-KEY:METHOD=AES-128,URI="key.bin?key_hash={segment.encryption_key.hash}",IV=0x{segment.iv.decode()}'.encode(),
+                f'#EXT-X-KEY:METHOD=AES-128,URI="key.bin?key_hash={segment.encryption_key.hash}",IV=0x{segment.iv.hex().upper()}'.encode(),
                 f"#EXTINF:{segment.duration},".encode(),
                 f"segment.ts?uuid={segment.uid}&key_hash={segment.encryption_key.hash}".encode(),
             ]

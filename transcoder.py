@@ -1,15 +1,21 @@
 from typing import AsyncIterator, Awaitable, Union, Optional
 import logging
 import asyncio
+import os
 
-from lib.handle_crash import handle
 from lib.structs import TranscodingSettings
 from lib.connector import SubscriptionClient, SubscriptionServer
+from lib.constants import RESTREAMER_HOST, RESTREAMER_PORT, TRANSCODER_PORT, DEFAULT_LOG_LEVEL
+
+restreamer_host = os.environ.get("RESTREAMER_HOST", RESTREAMER_HOST)
+restreamer_port = os.environ.get("RESTREAMER_PORT", RESTREAMER_PORT)
+transcoder_port = os.environ.get("TRANSCODER_PORT", TRANSCODER_PORT)
+log_level = os.environ.get("LOG_LEVEL", DEFAULT_LOG_LEVEL)
 
 
-logging.getLogger("ConnectionLogger").setLevel(logging.DEBUG)
+logging.getLogger("ConnectionLogger").setLevel(log_level)
 transcoding_logger = logging.getLogger("TranscodingLogger")
-transcoding_logger.setLevel(logging.DEBUG)
+transcoding_logger.setLevel(log_level)
 transcoding_logger.addHandler(logging.StreamHandler())
 transcoding_logger.debug("TranscodingLogger initialized")
 
@@ -84,17 +90,14 @@ class TranscodingServer(SubscriptionServer):
 
 
 async def run(client: SubscriptionClient):
-    server = TranscodingServer("0.0.0.0", 8081, subscription_client=client)
+    server = TranscodingServer("0.0.0.0", transcoder_port, subscription_client=client)
     await server.run()
 
 
 async def main():
-    client = SubscriptionClient("127.0.0.1", 8080)
+    client = SubscriptionClient(restreamer_host, restreamer_port)
     await client.run(run)
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except:
-        asyncio.run(handle())
+    asyncio.run(main())
