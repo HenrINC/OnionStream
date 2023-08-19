@@ -60,7 +60,6 @@ class ContentManager:
             exclude_none=True,
             exclude_defaults=True,
             exclude_unset=True,
-            skip_defaults=True,
         )
         imutable_identifier: frozenset = IdentifiableSingleton.get_imutable_identifier(
             mutable_identifier

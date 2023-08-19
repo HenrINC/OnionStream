@@ -86,7 +86,7 @@ class EncryptionKey(BaseModel):
     salt: bytes
     bytes: bytes
     hash: str
-    creation_time: int
+    creation_time: int | float
     ttl: int
 
     def to_bytes(self) -> bytes:
