@@ -1,5 +1,2 @@
-HiddenServiceDir /tor/webserver/
-HiddenServicePort ${WEBSERVER_INPORT} ${WEBSERVER_HOST}:${WEBSERVER_PORT}
-
-HiddenServiceDir /tor/api/
-HiddenServicePort ${API_INPORT} ${API_HOST}:${API_PORT}
+HiddenServiceDir /tor/HiddenService/
+HiddenServicePort ${INPORT} ${NGINX_HOST}:${NGINX_PORT}

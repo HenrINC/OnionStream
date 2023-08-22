@@ -27,16 +27,19 @@ async def startup_event():
 
 
 @app.get("/segment.ts")
+@app.get("api/segment.ts")
 async def segment(request: SegmentRequest = Depends()):
     segment = await content_manager.get_segment(request)
     return Response(content=segment.bytes, media_type="video/mp2t", headers=base_headers)
 
 @app.get("/playlist.m3u8")
+@app.get("/api/playlist.m3u8")
 async def playlist(request: PlaylistRequest = Depends()):
     playlist = await content_manager.get_playlist(request)
     return Response(content=playlist.bytes, media_type="application/vnd.apple.mpegurl", headers=base_headers)
 
 @app.get("/key.bin")
+@app.get("/api/key.bin")
 async def key(request: EncryptionKeyRequest = Depends()):
     key = await content_manager.get_key(request)
     return Response(content=key.bytes, media_type="application/octet-stream", headers=base_headers)

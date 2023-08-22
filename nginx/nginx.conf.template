@@ -1,0 +1,33 @@
+worker_processes 1;
+
+events { 
+    worker_connections 1024;
+}
+
+http {
+
+    sendfile on;
+
+    resolver 127.0.0.11;
+
+    server {
+        listen ${NGINX_PORT};
+
+        # Redirect all /api/* requests to api:8083
+        location /api/ {
+            proxy_pass http://${API_HOST}:${API_PORT};
+            proxy_connect_timeout 120s;
+            proxy_read_timeout 300s;
+            proxy_send_timeout 120s;
+            send_timeout 120s;
+        }
+
+        # Redirect all other requests to webserver:8084
+        location / {
+            proxy_pass http://${WEBSERVER_HOST}:${WEBSERVER_PORT};
+        }
+    }
+
+    access_log /dev/stdout;
+    error_log /dev/stderr;
+}

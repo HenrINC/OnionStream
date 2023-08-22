@@ -1,4 +1,7 @@
-start py backend/restreamer.py
-start py backend/transcoder.py
-start py backend/encoder.py
-start py backend/api.py
+cd backend
+start py restreamer.py
+start py transcoder.py
+start py encoder.py
+start py api.py
+cd ../webserver
+start py webserver.py

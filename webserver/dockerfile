@@ -1,12 +1,17 @@
 FROM python:3.11-slim-bookworm
 
+RUN apt update && apt install -y wget
+
+COPY ./pages /app/pages
+COPY ./assets /app/assets
+COPY webserver.py /app/webserver.py
+RUN wget https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js -P /app/assets/
+
 RUN useradd -m runner
 USER runner
 
 RUN pip3 install --upgrade pip \
     && pip3 install --upgrade fastapi uvicorn
-
-COPY webserver.py /app/webserver.py
 
 WORKDIR /app
 CMD python3 webserver.py

@@ -11,7 +11,7 @@ services:
       dockerfile: dockerfile.transcoder
     networks:
       - transcoder_network
-    hostname: transcoder
+    hostname: transcoder.local
     environment:
       <<: *common-environment
       RESTREAMER_HOST: host.docker.internal
@@ -25,10 +25,10 @@ services:
     networks:
       - transcoder_network
       - encoder_network
-    hostname: encoder
+    hostname: encoder.local
     environment:
       <<: *common-environment
-      TRANSCODER_HOST: transcoder
+      TRANSCODER_HOST: transcoder.local
       TRANSCODER_PORT: 8081
       ENCODER_PORT: 8082
     depends_on:
@@ -41,10 +41,10 @@ services:
     networks:
       - encoder_network
       - api_network
-    hostname: api
+    hostname: api.local
     environment:
       <<: *common-environment
-      ENCODER_HOST: encoder
+      ENCODER_HOST: encoder.local
       ENCODER_PORT: 8082
       API_PORT: 8083
     depends_on:
@@ -56,31 +56,43 @@ services:
       dockerfile: dockerfile
     networks:
       - webserver_network
-    hostname: webserver
+    hostname: webserver.local
     environment:
       <<: *common-environment
       WEBSERVER_PORT: 8084
   
+  nginx:
+    build:
+      context: nginx
+      dockerfile: dockerfile
+    networks:
+      - nginx_network
+      - webserver_network
+      - api_network
+    hostname: nginx.local
+    environment:
+      <<: *common-environment
+      NGINX_PORT: 8888
+      API_HOST: api.local
+      API_PORT: 8083
+      WEBSERVER_HOST: webserver.local
+      WEBSERVER_PORT: 8084
+      LOG_ADDRESS: true
+      
   tor_proxy:
     build:
       context: tor
       dockerfile: dockerfile.proxy
     networks:
-      - webserver_network
-      - api_network
+      - nginx_network
     environment:
       <<: *common-environment
-      API_HOST: api
-      API_PORT: 8083
-      API_INPORT: 8888
-      WEBSERVER_HOST: webserver
-      WEBSERVER_PORT: 8084
-      WEBSERVER_INPORT: 80
+      NGINX_HOST: nginx.local
+      NGINX_PORT: 8888
+      INPORT: 80
       LOG_ADDRESS: true
     depends_on:
-      - webserver
-      - api
-
+      - nginx
   
   # tor_relay:
   #   build: 
@@ -94,20 +106,15 @@ services:
       context: i2p
       dockerfile: dockerfile
     networks:
-      - webserver_network
-      - api_network
+      - nginx_network
     environment:
       <<: *common-environment
-      API_HOST: api
-      API_PORT: 8083
-      API_INPORT: 8888
-      WEBSERVER_HOST: webserver
-      WEBSERVER_PORT: 8084
-      WEBSERVER_INPORT: 80
+      NGINX_HOST: nginx.local
+      NGINX_PORT: 8888
+      INPORT: 80
       LOG_ADDRESS: true
     depends_on:
-      - webserver
-      - api
+      - nginx
 
 networks:
   transcoder_network:
@@ -117,4 +124,6 @@ networks:
   api_network:
     driver: bridge
   webserver_network:
+    driver: bridge
+  nginx_network:
     driver: bridge
