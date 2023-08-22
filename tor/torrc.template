@@ -1,0 +1,2 @@
+HiddenServiceDir /tor/HiddenService/
+HiddenServicePort ${INPORT} ${NGINX_HOST}:${NGINX_PORT}

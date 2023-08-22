@@ -1,0 +1,10 @@
+FROM nginx:alpine
+
+RUN apk add --no-cache gettext
+
+COPY nginx.conf.template /nginx/nginx.conf.template
+COPY main.sh /nginx/main.sh
+
+WORKDIR /nginx
+
+CMD sh ./main.sh

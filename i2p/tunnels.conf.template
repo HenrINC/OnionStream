@@ -1,0 +1,6 @@
+[Server]
+type = http
+host = ${NGINX_HOST}
+port = ${NGINX_PORT}
+keys = keys/keys.dat
+inport = ${INPORT}
