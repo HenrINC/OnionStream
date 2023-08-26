@@ -1,0 +1,17 @@
+FROM python:3.11-slim-bookworm
+
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m runner
+USER runner
+
+RUN pip3 install --upgrade pip \
+    && pip3 install --upgrade pydantic
+
+COPY ./lib /app/lib
+COPY restreamer.py /app
+
+WORKDIR /app
+CMD python3 restreamer.py

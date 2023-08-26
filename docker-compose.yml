@@ -5,6 +5,16 @@ x-common-environment: &common-environment
   LOG_LEVEL: WARNING
 
 services:
+  restreamer:
+    build:
+      context: backend
+      dockerfile: dockerfile.restreamer
+    networks:
+      - restreamer_network
+    hostname: restreamer.local
+    environment:
+      <<: *common-environment
+      RESTREAMER_PORT: 8080
   transcoder:
     build:
       context: backend
@@ -14,7 +24,7 @@ services:
     hostname: transcoder.local
     environment:
       <<: *common-environment
-      RESTREAMER_HOST: host.docker.internal
+      RESTREAMER_HOST: restreamer.local
       RESTREAMER_PORT: 8080
       TRANSCODER_PORT: 8081
   
