@@ -15,6 +15,7 @@ services:
     environment:
       <<: *common-environment
       RESTREAMER_PORT: 8080
+
   transcoder:
     build:
       context: backend
@@ -27,6 +28,8 @@ services:
       RESTREAMER_HOST: restreamer.local
       RESTREAMER_PORT: 8080
       TRANSCODER_PORT: 8081
+    depends_on:
+      - restreamer
   
   encoder:
     build:
@@ -88,6 +91,9 @@ services:
       WEBSERVER_HOST: webserver.local
       WEBSERVER_PORT: 8084
       LOG_ADDRESS: true
+    depends_on:
+      - api
+      - webserver
       
   tor_proxy:
     build:
