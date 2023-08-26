@@ -12,6 +12,9 @@ x-common-environment: &common-environment
 
 services:
   restreamer:
+    build:
+      context: ../../backend
+      dockerfile: dockerfile.restreamer
     networks:
       - restreamer_network
       - transcoder_network
@@ -21,6 +24,9 @@ services:
       RESTREAMER_PORT: 8080
 
   transcoder:
+    build:
+      context: ../../backend
+      dockerfile: dockerfile.transcoder
     networks:
       - transcoder_network
     hostname: transcoder.local
@@ -33,6 +39,9 @@ services:
       - restreamer
   
   encoder:
+    build:
+      context: ../../backend
+      dockerfile: dockerfile.encoder
     networks:
       - transcoder_network
       - encoder_network
@@ -46,6 +55,9 @@ services:
       - transcoder
 
   api:
+    build:
+      context: ../../backend
+      dockerfile: dockerfile.api
     networks:
       - encoder_network
       - api_network
@@ -59,6 +71,9 @@ services:
       - encoder
   
   webserver:
+    build:
+      context: ../../webserver
+      dockerfile: dockerfile
     networks:
       - webserver_network
     hostname: webserver.local
@@ -67,6 +82,9 @@ services:
       WEBSERVER_PORT: 8084
   
   nginx:
+    build:
+      context: ../../nginx
+      dockerfile: dockerfile
     networks:
       - nginx_network
       - webserver_network
