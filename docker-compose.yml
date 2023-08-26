@@ -11,6 +11,7 @@ services:
       dockerfile: dockerfile.restreamer
     networks:
       - restreamer_network
+      - transcoder_network
     hostname: restreamer.local
     environment:
       <<: *common-environment
