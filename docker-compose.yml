@@ -133,6 +133,9 @@ services:
       - nginx
 
 networks:
+  #Use setup_network.sh to create these networks
+  restreamer_network:
+    external: true
   transcoder_network:
     driver: bridge
   encoder_network:
