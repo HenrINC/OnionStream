@@ -1,0 +1,38 @@
+FROM debian:bookworm-slim
+
+# Install required packages
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    nginx \
+    wget \
+    libnginx-mod-rtmp
+
+# Copy your test video to the container
+RUN wget https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Philips_PM5544.svg/2560px-Philips_PM5544.svg.png /source.png
+
+# Configuration for nginx with the RTMP module for HLS streaming
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Entry point command to start streaming
+CMD [\
+    "bash", \
+    "-c", \
+    "\
+        nginx \
+        && ffmpeg \
+            -re \
+            -i /source.png \
+            -stream_loop -1 \
+            -f rtsp rtsp://localhost:8554/stream \
+        && ffmpeg \
+            -re \
+            -stream_loop -1 \
+            -i /source.png \
+            -c:v libx264 \
+            -an \
+            -f hls \
+            -hls_time 4 \
+            -hls_playlist_type event \
+            /hls/index.m3u8 \
+    "\
+]

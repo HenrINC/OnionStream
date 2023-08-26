@@ -1,0 +1,116 @@
+###################################################################
+# DISCLAIMER:                                                     #
+# This docker-compose file is only intended for testing purposes. #
+# Most of the security features are disabled                      #
+###################################################################
+
+version: '3.4'  
+x-common-environment: &common-environment
+  MAX_BANDWIDTH: 300000
+  DEBUG_LEVEL: 0
+  LOG_LEVEL: WARNING
+
+services:
+  restreamer:
+    networks:
+      - restreamer_network
+      - transcoder_network
+    hostname: restreamer.local
+    environment:
+      <<: *common-environment
+      RESTREAMER_PORT: 8080
+
+  transcoder:
+    networks:
+      - transcoder_network
+    hostname: transcoder.local
+    environment:
+      <<: *common-environment
+      RESTREAMER_HOST: restreamer.local
+      RESTREAMER_PORT: 8080
+      TRANSCODER_PORT: 8081
+    depends_on:
+      - restreamer
+  
+  encoder:
+    networks:
+      - transcoder_network
+      - encoder_network
+    hostname: encoder.local
+    environment:
+      <<: *common-environment
+      TRANSCODER_HOST: transcoder.local
+      TRANSCODER_PORT: 8081
+      ENCODER_PORT: 8082
+    depends_on:
+      - transcoder
+
+  api:
+    networks:
+      - encoder_network
+      - api_network
+    hostname: api.local
+    environment:
+      <<: *common-environment
+      ENCODER_HOST: encoder.local
+      ENCODER_PORT: 8082
+      API_PORT: 8083
+    depends_on:
+      - encoder
+  
+  webserver:
+    networks:
+      - webserver_network
+    hostname: webserver.local
+    environment:
+      <<: *common-environment
+      WEBSERVER_PORT: 8084
+  
+  nginx:
+    networks:
+      - nginx_network
+      - webserver_network
+      - api_network
+    hostname: nginx.local
+    environment:
+      <<: *common-environment
+      NGINX_PORT: 8888
+      API_HOST: api.local
+      API_PORT: 8083
+      WEBSERVER_HOST: webserver.local
+      WEBSERVER_PORT: 8084
+      LOG_ADDRESS: true
+    depends_on:
+      - api
+      - webserver
+    expose:
+      - 8888
+    ports:
+      - 8888:8888
+  
+  source:
+    build:
+      context: .
+      dockerfile: dockerfile.source
+    networks:
+      - source_network
+    hostname: source.local      
+
+networks:
+  #Use setup_test_network.sh to create these networks
+  restreamer_network:
+    external: true
+  source_network:
+    external: true
+
+  
+  transcoder_network:
+    driver: bridge
+  encoder_network:
+    driver: bridge
+  api_network:
+    driver: bridge
+  webserver_network:
+    driver: bridge
+  nginx_network:
+    driver: bridge
