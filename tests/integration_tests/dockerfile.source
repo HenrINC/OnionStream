@@ -13,6 +13,8 @@ RUN wget https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Philips_PM554
 # Configuration for nginx with the RTMP module for HLS streaming
 COPY nginx.conf /etc/nginx/nginx.conf
 
+RUN mkdir /hls
+
 # Entry point command to start streaming
 CMD [\
     "bash", \
