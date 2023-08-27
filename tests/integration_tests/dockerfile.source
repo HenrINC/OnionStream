@@ -19,11 +19,11 @@ CMD [\
     "-c", \
     "\
         nginx \
-        && ffmpeg \
-            -re \
-            -i /source.png \
-            -stream_loop -1 \
-            -f rtsp rtsp://localhost:8554/stream \
+        # && ffmpeg \
+        #     -re \
+        #     -i /source.png \
+        #     -stream_loop -1 \
+        #     -f rtsp rtsp://localhost:8554/stream \
         && ffmpeg \
             -re \
             -stream_loop -1 \
