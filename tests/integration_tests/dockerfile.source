@@ -27,6 +27,7 @@ CMD [\
         #     -stream_loop -1 \
         #     -f rtsp rtsp://localhost:8554/stream \
         && ffmpeg \
+            -loglevel warning \
             -re \
             -stream_loop -1 \
             -i /source.png \
