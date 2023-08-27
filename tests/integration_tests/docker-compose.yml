@@ -113,10 +113,10 @@ services:
     #We cannot have multiple ipvlans on the same interface
     #For simplicity we use a host network for the source
     network_mode: host
-    hostname: source.local      
+    hostname: source.local
 
 networks:
-  #Use setup_test_network.sh to create these networks
+  #Use setup_network.sh to create these networks
   restreamer_network:
     external: true
 
