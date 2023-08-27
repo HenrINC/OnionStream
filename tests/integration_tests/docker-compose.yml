@@ -118,8 +118,11 @@ networks:
   #Use setup_test_network.sh to create these networks
   restreamer_network:
     external: true
+
+  #We cannot have multiple ipvlans on the same interface
+  #For simplicity we use a host network for the source
   source_network:
-    external: true
+    driver: host
 
   
   transcoder_network:
