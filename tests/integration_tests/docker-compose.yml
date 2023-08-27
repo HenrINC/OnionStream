@@ -110,8 +110,9 @@ services:
     build:
       context: .
       dockerfile: dockerfile.source
-    networks:
-      - source_network
+    #We cannot have multiple ipvlans on the same interface
+    #For simplicity we use a host network for the source
+    network_mode: host
     hostname: source.local      
 
 networks:
@@ -119,12 +120,6 @@ networks:
   restreamer_network:
     external: true
 
-  #We cannot have multiple ipvlans on the same interface
-  #For simplicity we use a host network for the source
-  source_network:
-    driver: host
-
-  
   transcoder_network:
     driver: bridge
   encoder_network:
