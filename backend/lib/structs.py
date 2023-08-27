@@ -139,14 +139,21 @@ class Playlist(BaseModel):
     segments: list[Segment]
 
     @property
-    def media_sequence(self) -> int:
-        return self.segments[0].media_sequence
+    def media_sequence(self) -> int | float:
+        return self.segments[0].media_sequence if self.segments else 0
+
+    @property
+    def target_duration(self) -> int | float:
+        return max(
+            segment.duration for segment in self.segments
+        ) if self.segments else 0
 
     @property
     def bytes(self) -> bytes:
         lines: list[bytes] = [
             b"#EXTM3U",
             b"#EXT-X-VERSION:3",
+            f"#EXT-X-TARGETDURATION:{self.target_duration}".encode(),
             f"#EXT-X-PLAYLIST-TYPE:{self.playlist_type}".encode(),
             f"#EXT-X-MEDIA-SEQUENCE:{self.media_sequence}".encode(),
         ]
@@ -163,22 +170,14 @@ class Playlist(BaseModel):
         return sum([segment.duration for segment in self.segments])
 
 
-class Source(BaseModel):
-    source: Optional[str]
+class PlaylistRequest(TranscodingSettings):
+    source: str
 
 
-class BaseRequest(Source, TranscodingSettings):
-    pass
-
-
-class PlaylistRequest(BaseRequest):
-    pass
-
-
-class SegmentRequest(BaseRequest):
+class SegmentRequest(BaseModel):
     uuid: str
     key_hash: str
 
 
-class EncryptionKeyRequest(BaseRequest):
+class EncryptionKeyRequest(BaseModel):
     key_hash: str

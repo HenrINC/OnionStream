@@ -21,7 +21,7 @@ class CSPMiddleware:
                 headers = message.get("headers", [])
                 csp_header = (
                     "content-security-policy",
-                    "default-src 'self'; media-src 'self' blob: data:; connect-src 'self' blob: data:;",
+                    "default-src 'self'; media-src 'self' blob: data:; connect-src 'self' blob: data:; worker-src 'self' blob:;",
                 )
                 headers.append(csp_header)
                 message["headers"] = headers
@@ -34,7 +34,7 @@ app = FastAPI()
 
 app.add_middleware(CSPMiddleware)
 
-webserver_port = os.environ.get("WEBSERVER_PORT")
+webserver_port = int(os.environ.get("WEBSERVER_PORT", 8084))
 
 app.mount("/pages", StaticFiles(directory="pages"), name="pages")
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")

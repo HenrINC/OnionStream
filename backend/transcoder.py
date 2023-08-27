@@ -111,5 +111,6 @@ if __name__ == "__main__":
     except:
         if POST_MORTEM_DEBUGGER:
             import pdb
-
             pdb.post_mortem()
+        else:
+            raise

@@ -1,47 +1,45 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HLS Demo Player</title>
-    <script src="/assets/hls.min.js"></script>
-    <script src="/assets/lib.js"></script>
-</head>
-<body>
-    <video id="player" controls></video>
-    <br>
-    <form id="hls-form">
-        <label for="source">Stream source:</label>
-        <input type="text" name="source">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>HLS Demo Player</title>
+        <link rel="stylesheet" href="/assets/style.css">
+        <script src="/assets/hls.min.js"></script>
+        <script src="/assets/main.js"></script>
+    </head>
+    <body>
+        <video id="player" controls></video>
         <br>
+        <form id="hls-form">
+            <label for="source">Stream source:</label>
+            <input type="text" name="source">
+            <br>
 
-        <label for="c__v">Video Codec:</label>
-        <input type="text" name="c__v">
-        <br>
+            <label for="c__v">Video Codec:</label>
+            <input type="text" name="c__v">
+            <br>
 
-        <label for="c__a">Audio Codec:</label>
-        <input type="text" name="c__a">
-        <br>
+            <label for="c__a">Audio Codec:</label>
+            <input type="text" name="c__a">
+            <br>
 
-        <label for="b__a">Audio Bitrate:</label>
-        <input type="text" name="b__a">
-        <br>
+            <label for="b__a">Audio Bitrate:</label>
+            <input type="text" name="b__a">
+            <br>
 
-        <label for="maxrate">Max Rate:</label>
-        <input type="text" name="maxrate">
-        <br>
+            <label for="maxrate">Max Rate:</label>
+            <input type="text" name="maxrate">
+            <br>
 
-        <label for="bufsize">Buffer Size:</label>
-        <input type="text" name="bufsize">
-        <br>
+            <label for="bufsize">Buffer Size:</label>
+            <input type="text" name="bufsize">
+            <br>
 
-        <label for="vf">Video Filters (scale):</label>
-        <input type="text" name="vf">
-        <br>
-
-        <button type="button" id="HLS-submit">Load Stream</button>
-    </form>
-
-    <script src="/assets/main.js"></script>    
-</body>
+            <label for="vf">Video Filters (scale):</label>
+            <input type="text" name="vf">
+            <br>
+            <button type="button" id="HLS-submit">Load Stream</button>
+        </form>    
+    </body>
 </html>

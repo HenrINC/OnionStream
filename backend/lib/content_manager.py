@@ -80,7 +80,7 @@ class ContentManager:
             self.data_setters.append(data_setter.__anext__())
         segments_uuids: list[str] = self.subscriptions[imutable_identifier]
         segments: list[Segment] = [self.segments[uuid] for uuid in segments_uuids]
-        return Playlist(segments=segments)
+        return Playlist(segments=segments, target_duration=60)
 
     async def handle_segment(self, data_setter: DataSetter, segment: bytes):
         mutable_identifier: dict = data_setter._mutable_identifier

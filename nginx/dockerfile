@@ -1,10 +1,13 @@
 FROM nginx:alpine
 
-RUN apk add --no-cache gettext
+RUN apk add --no-cache gettext dos2unix
 
 COPY nginx.conf.template /nginx/nginx.conf.template
 COPY main.sh /nginx/main.sh
 
 WORKDIR /nginx
+
+RUN dos2unix ./main.sh \
+    && dos2unix ./nginx.conf.template
 
 CMD sh ./main.sh

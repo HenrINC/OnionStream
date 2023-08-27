@@ -17,7 +17,7 @@ base_headers = {
 
 encoder_host = os.environ.get("ENCODER_HOST", ENCODER_HOST)
 encoder_port = os.environ.get("ENCODER_PORT", ENCODER_PORT)
-api_port = os.environ.get("API_PORT", API_PORT)
+api_port = int(os.environ.get("API_PORT", API_PORT))
 content_manager = ContentManager(encoder_host, encoder_port)
 
 @app.on_event("startup")
@@ -27,7 +27,7 @@ async def startup_event():
 
 
 @app.get("/segment.ts")
-@app.get("api/segment.ts")
+@app.get("/api/segment.ts")
 async def segment(request: SegmentRequest = Depends()):
     segment = await content_manager.get_segment(request)
     return Response(content=segment.bytes, media_type="video/mp2t", headers=base_headers)
