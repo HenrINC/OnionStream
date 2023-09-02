@@ -11,6 +11,7 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+RUN mkdir -p /tor/HiddenService
 COPY ./main.sh /tor/main.sh
 COPY ./torrc.template /tor/torrc.template
 
@@ -22,7 +23,8 @@ RUN dos2unix ./main.sh \
     && dos2unix ./torrc.template
 
 RUN chmod +x main.sh \
-    && chown -R runner:runner /tor
+    && chown -R runner:runner /tor \
+    && chmod -R 700 /tor
 
 USER runner
 

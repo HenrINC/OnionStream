@@ -108,6 +108,8 @@ services:
       NGINX_PORT: 8888
       INPORT: 80
       LOG_ADDRESS: true
+    volumes:
+      - OnionStreamTorHiddenService:/tor/HiddenService
     depends_on:
       - nginx
   
@@ -147,3 +149,6 @@ networks:
     driver: bridge
   nginx_network:
     driver: bridge
+
+volumes:
+  OnionStreamTorHiddenService:
