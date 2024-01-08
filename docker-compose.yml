@@ -110,6 +110,8 @@ services:
       LOG_ADDRESS: true
     volumes:
       - OnionStreamTorHiddenService:/tor/HiddenService
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     depends_on:
       - nginx
   
@@ -132,6 +134,9 @@ services:
       NGINX_PORT: 8888
       INPORT: 80
       LOG_ADDRESS: true
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     depends_on:
       - nginx
 
