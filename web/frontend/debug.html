@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>OnionStream Debug</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #111;
+            color: #eee;
+        }
+
+        #log {
+            white-space: pre;
+            background: #222;
+            padding: 1em;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>OnionStream WebSocket Debug</h1>
+    <button onclick="clearLogs()">Clear</button>
+    <button onclick="startLatency()">Start Latency Test</button>
+    <button onclick="startThroughput()">Start Throughput Test</button>
+    <div id="log"></div>
+
+    <script>
+        const log = (msg) => {
+            document.getElementById('log').textContent += msg + '\n';
+        };
+
+        function clearLogs() {
+            document.getElementById('log').textContent = '';
+        }
+
+        function startLatency() {
+            let ws;
+            let reconnectTimeout = null;
+
+            function connect() {
+                ws = new WebSocket(`ws://${location.host}/debug/latency`);
+
+                ws.onopen = () => {
+                    log("[Latency] Connected.");
+                    if (reconnectTimeout) {
+                        clearTimeout(reconnectTimeout);
+                        reconnectTimeout = null;
+                    }
+                };
+
+                ws.onmessage = (e) => {
+                    const T2 = Date.now(); // When we received server's message
+                    const [type, content] = e.data.split(":");
+
+                    if (type === 'log') {
+                        log(content);
+                    } else if (type === 'time') {
+                        const T1 = parseFloat(content); // Server's timestamp
+                        const T3 = Date.now(); // When we send our reply
+                        ws.send(`${T3}:${T2}`);
+                    }
+                };
+
+                ws.onclose = () => {
+                    log("[Latency] Disconnected. Reconnecting in 1s...");
+                    reconnectTimeout = setTimeout(connect, 1000);
+                };
+
+                ws.onerror = (err) => {
+                    log("[Latency] Error occurred.");
+                    console.error(err);
+                    ws.close(); // Triggers onclose
+                };
+            }
+
+            connect();
+        }
+
+
+        function startThroughput() {
+            let ws = new WebSocket(`ws://${location.host}/debug/throughput`);
+            let testIndex = 0;
+
+            ws.binaryType = "arraybuffer";
+
+            ws.onopen = () => {
+                log("[Throughput] Connected.");
+            };
+
+            ws.onmessage = (e) => {
+                if (typeof e.data === "string") {
+                    if (e.data.startsWith("log:")) {
+                        log(e.data.slice(4)); // strip 'log:' prefix
+                    }
+                } else if (e.data instanceof ArrayBuffer) {
+                    // Respond with an ACK when data is received
+                    ws.send("ack");
+                }
+            };
+
+            ws.onclose = () => {
+                log("[Throughput] Disconnected.");
+            };
+
+            ws.onerror = (err) => {
+                log("[Throughput] Error occurred.");
+                console.error(err);
+            };
+        }
+
+    </script>
+</body>
+
+</html>

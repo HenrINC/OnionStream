@@ -1,0 +1,47 @@
+services:
+  tor:
+    build:
+      context: ./tor
+      dockerfile: Dockerfile
+    container_name: onionstream-tor
+    command: tor -f /etc/tor/torrc
+    volumes:
+      - /opt/onionstream/tor/data:/var/lib/tor
+    networks:
+      - onionnet
+    restart: unless-stopped
+
+  webserver:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: onionstream-webserver
+    environment:
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - onionnet
+      - intranet
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine3.21
+    container_name: onionstream-redis
+    networks:
+      - intranet
+    restart: unless-stopped
+
+  transcoder:
+    build:
+      context: ./transcoder
+      dockerfile: Dockerfile
+    container_name: onionstream-transcoder
+    environment:
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - intranet
+
+networks:
+  onionnet:
+    driver: bridge
+  intranet:
+    driver: bridge

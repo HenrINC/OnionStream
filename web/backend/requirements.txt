@@ -1,0 +1,5 @@
+uvloop
+fastapi
+uvicorn
+websockets
+redis[hiredis]

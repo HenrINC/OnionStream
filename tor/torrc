@@ -1,0 +1,9 @@
+SocksPort 0  # Disable SOCKS proxy if not needed
+Log notice stdout
+
+DataDirectory /var/lib/tor
+
+HiddenServiceDir /var/lib/tor/hidden_service/
+HiddenServicePort 80 webserver:80
+
+ClientOnly 1

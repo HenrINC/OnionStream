@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>OnionStream Player</title>
+    <style>
+        body {
+            background: black;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        canvas {
+            border: 2px solid #ccc;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>OnionStream Player</h1>
+
+    <label for="streamSelect">Select Stream:</label>
+    <select id="streamSelect">
+        <option disabled selected>Loading...</option>
+    </select>
+
+    <canvas id="video" width="640" height="480"></canvas>
+
+    <script src="/static/h264decoder/bundle.js"></script>
+    <script>
+        const canvas = document.getElementById("video");
+        const ctx = canvas.getContext("2d");
+        let imageData = ctx.createImageData(canvas.width, canvas.height);
+        let ws = null;
+
+        const decoder = new H264DecoderModule.H264Decoder();
+
+        function renderFrame() {
+            const width = decoder.width;
+            const height = decoder.height;
+            const yuvBuffer = decoder.pic;
+
+            console.log("Picture decoded:", width, height);
+
+            if (canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+                imageData = ctx.createImageData(width, height);
+            }
+
+            // Convert YUV420 to RGB
+            const yPlane = yuvBuffer.subarray(0, width * height);
+            const uPlane = yuvBuffer.subarray(width * height, width * height + (width * height) / 4);
+            const vPlane = yuvBuffer.subarray(width * height + (width * height) / 4, width * height + (width * height) / 2);
+
+            const data = imageData.data;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const yIndex = y * width + x;
+                    const uvIndex = (y >> 1) * (width >> 1) + (x >> 1);
+
+                    const Y = yPlane[yIndex];
+                    const U = uPlane[uvIndex] - 128;
+                    const V = vPlane[uvIndex] - 128;
+
+                    // YUV to RGB conversion
+                    const R = Math.max(0, Math.min(255, Y + 1.402 * V));
+                    const G = Math.max(0, Math.min(255, Y - 0.344 * U - 0.714 * V));
+                    const B = Math.max(0, Math.min(255, Y + 1.772 * U));
+
+                    const offset = yIndex * 4;
+                    data[offset] = R;
+                    data[offset + 1] = G;
+                    data[offset + 2] = B;
+                    data[offset + 3] = 255;
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        async function fetchStreams() {
+            try {
+                const res = await fetch("/stream/stream_list");
+                const streams = await res.json();
+                const select = document.getElementById("streamSelect");
+                select.innerHTML = "";
+
+                for (const stream of streams) {
+                    const option = document.createElement("option");
+                    option.value = stream;
+                    option.textContent = stream;
+                    select.appendChild(option);
+                }
+
+                if (streams.length > 0) {
+                    select.selectedIndex = 0;
+                    connectToStream(streams[0]);
+                } else {
+                    console.warn("No available streams.");
+                }
+            } catch (err) {
+                console.error("Failed to fetch stream list:", err);
+            }
+        }
+
+        function connectToStream(streamId) {
+            if (ws) {
+                ws.close();
+            }
+
+            const host = window.location.hostname;
+            const url = `ws://${host}/stream/live/${streamId}`;
+            console.log("Connecting to stream:", url);
+
+            ws = new WebSocket(url);
+            ws.binaryType = "arraybuffer";
+
+            ws.onopen = () => {
+                console.log("WebSocket connected");
+            };
+
+            ws.onmessage = (event) => {
+                if (!(event.data instanceof ArrayBuffer)) {
+                    console.warn("Non-binary message received");
+                    return;
+                }
+
+                const data = new Uint8Array(event.data);
+                const result = decoder.decode(data);
+
+                if (result === H264DecoderModule.H264Decoder.PIC_RDY) {
+                    renderFrame();
+                } else if (result === H264DecoderModule.H264Decoder.ERROR) {
+                    console.error("Decoder error");
+                } else if (result === H264DecoderModule.H264Decoder.PARAM_SET_ERROR) {
+                    console.error("Parameter set error");
+                } else if (result === H264DecoderModule.H264Decoder.MEMALLOC_ERROR) {
+                    console.error("Memory allocation error");
+                } else {
+                    console.log("Decoder result:", result);
+                }
+            };
+
+            ws.onerror = (err) => {
+                console.error("WebSocket error:", err);
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket closed");
+            };
+        }
+
+        document.getElementById("streamSelect").addEventListener("change", (e) => {
+            connectToStream(e.target.value);
+        });
+
+        fetchStreams();
+    </script>
+</body>
+
+</html>
