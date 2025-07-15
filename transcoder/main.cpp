@@ -53,30 +53,30 @@ void parse_nal(const uint8_t *data, size_t size)
     uint8_t nri = (header >> 5) & 0x03;
     uint8_t nal_type = header & 0x1F;
 
-    std::cout << "NAL header: 0x" << std::hex << int(header) << std::dec << "\n";
-    std::cout << "  forbidden_zero_bit: " << int(forbidden_zero_bit) << "\n";
-    std::cout << "  nal_ref_idc: " << int(nri) << "\n";
-    std::cout << "  nal_unit_type: " << int(nal_type) << "\n";
+    // std::cout << "NAL header: 0x" << std::hex << int(header) << std::dec << "\n";
+    // std::cout << "  forbidden_zero_bit: " << int(forbidden_zero_bit) << "\n";
+    // std::cout << "  nal_ref_idc: " << int(nri) << "\n";
+    // std::cout << "  nal_unit_type: " << int(nal_type) << "\n";
 
     switch (nal_type)
     {
     case 1:
-        std::cout << "  → Non-IDR slice\n";
+        // std::cout << "  → Non-IDR slice\n";
         break;
     case 5:
-        std::cout << "  → IDR slice (keyframe)\n";
+        // std::cout << "  → IDR slice (keyframe)\n";
         break;
     case 6:
-        std::cout << "  → SEI\n";
+        // std::cout << "  → SEI\n";
         break;
     case 7:
-        std::cout << "  → SPS (sequence parameter set)\n";
+        // std::cout << "  → SPS (sequence parameter set)\n";
         break;
     case 8:
-        std::cout << "  → PPS (picture parameter set)\n";
+        // std::cout << "  → PPS (picture parameter set)\n";
         break;
     default:
-        std::cout << "  → Unknown or unsupported\n";
+        // std::cout << "  → Unknown or unsupported\n";
         break;
     }
 }
@@ -96,15 +96,15 @@ void check(int ret, const char *msg)
 int main()
 {
     const char *redis_url = std::getenv("REDIS_URL");
-    std::cout << "Using Redis URL: " << (redis_url ? redis_url : "redis://localhost:6379") << std::endl;
+    // std::cout << "Using Redis URL: " << (redis_url ? redis_url : "redis://localhost:6379") << std::endl;
     Redis redis(redis_url ? redis_url : "redis://localhost:6379");
 
     std::string stream_name = "bigbuckbunny";
     std::string stream_key = "onionstream:stream:" + stream_name;
 
-    std::cout << "Registering stream" << std::endl;
+    // std::cout << "Registering stream" << std::endl;
     redis.sadd("onionstream:streams", stream_name);
-    std::cout << "Stream registered" << std::endl;
+    // std::cout << "Stream registered" << std::endl;
 
     const std::string filepath = "/demo/bigbuckbunny.mp4";
 
@@ -244,22 +244,12 @@ int main()
                         parse_nal(encoded_pkt->data, encoded_pkt->size);
                         std::string nal(reinterpret_cast<char *>(encoded_pkt->data), encoded_pkt->size);
 
-                        // Get current timestamp
-                        auto now = std::chrono::system_clock::now();
-                        auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-
-                        // Determine frame type
+                        // Determine frame type for logging
                         std::string frame_type = (encoded_pkt->flags & AV_PKT_FLAG_KEY) ? "keyframe" : "frame";
 
-                        // Add to Redis Stream
-                        std::unordered_map<std::string, std::string> fields = {
-                            {"data", nal},
-                            {"timestamp", std::to_string(timestamp)},
-                            {"frame_type", frame_type},
-                            {"size", std::to_string(encoded_pkt->size)}};
-
-                        redis.xadd(stream_key, "*", fields.begin(), fields.end());
-                        std::cout << "Added " << frame_type << " of size " << encoded_pkt->size << " to stream: " << stream_key << std::endl;
+                        // Publish to Redis Pub/Sub channel
+                        redis.publish(stream_key, nal);
+                        // std::cout << "Published " << frame_type << " of size " << encoded_pkt->size << " to channel: " << stream_key << std::endl;
                         av_packet_free(&encoded_pkt);
                         encoded_pkt = av_packet_alloc();
                     }
