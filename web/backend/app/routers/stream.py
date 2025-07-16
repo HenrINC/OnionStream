@@ -1,19 +1,102 @@
 import os
 import asyncio
-from collections import defaultdict
 
 from redis import asyncio as aioredis
 
 from fastapi.routing import APIRouter
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
+
+
+class StreamBroker:
+    __instances__: dict[str, "StreamBroker"] = {}
+
+    @classmethod
+    def get(cls, stream_id: str) -> "StreamBroker":
+        if stream_id not in cls.__instances__:
+            cls.__instances__[stream_id] = cls(stream_id)
+        return cls.__instances__[stream_id]
+
+    def __init__(self, stream_id: str):
+        self.stream_id = stream_id
+        self.task: asyncio.Task | None = None
+        self.contexts: list["StreamBrokerContext"] = []
+        self._lock = asyncio.Lock()
+
+    @property
+    def _channel_name(self) -> str:
+        return f"onionstream:stream:{self.stream_id}"
+
+    async def _main_loop(self):
+        pubsub = redis.pubsub()
+        await pubsub.subscribe(self._channel_name)
+
+        while True:
+            message = await pubsub.get_message(timeout=1.0)
+            if message is None:
+                print(f"No message received for stream {self.stream_id}, continuing")
+                continue
+            if message["type"] != "message":
+                print(
+                    f"Received non-message type for stream {self.stream_id}: {message['type']}"
+                )
+                continue
+            frame_data = message["data"]
+            if not self.contexts:
+                print(f"No active contexts for stream {self.stream_id}, skipping")
+                continue
+            for context in self.contexts:
+                try:
+                    await context._nals.put(frame_data)
+                except asyncio.QueueFull:
+                    print(
+                        f"Queue full for context in stream {self.stream_id}, skipping"
+                    )
+                    continue
+            await asyncio.sleep(0)
+
+    async def _initialize(self):
+        if self.task is None or self.task.done():
+            self.task = asyncio.create_task(self._main_loop())
+
+    async def _shutdown(self):
+        if self.task:
+            self.task.cancel()
+            try:
+                await self.task
+            except asyncio.CancelledError:
+                pass
+            self.task = None
+
+    async def __aenter__(self):
+        async with self._lock:
+            if len(self.contexts) == 0:
+                await self._initialize()
+            context = StreamBrokerContext(self)
+            self.contexts.append(context)
+        return context
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        async with self._lock:
+            self.contexts.remove(self)
+            if len(self.contexts) == 0:
+                await self._shutdown()
+
+
+class StreamBrokerContext:
+    def __init__(self, stream_broker: StreamBroker):
+        self._stream_broker = stream_broker
+        self._nals = asyncio.Queue()
+
+    async def next_nal(self):
+        if self._stream_broker.task is None or self._stream_broker.task.done():
+            raise RuntimeError("Stream broker task is not running")
+        return await self._nals.get()
+
 
 router = APIRouter()
 
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis = aioredis.from_url(redis_url, decode_responses=False)
-
-clients: defaultdict[str, list[WebSocket]] = defaultdict(list)
-pubsub_tasks: defaultdict[str, asyncio.Task] = dict()
 
 
 @router.get("/stream_list")
@@ -25,97 +108,7 @@ async def stream_list() -> list[str]:
 @router.websocket("/live/{stream_id}")
 async def live_stream(ws: WebSocket, stream_id: str):
     await ws.accept()
-    clients[stream_id].append(ws)
-    await _create_pubsub_task_if_needed(stream_id)
-    try:
-        while True:
-            await asyncio.sleep(1)
-    except WebSocketDisconnect:
-        print(f"Client disconnected from stream {stream_id}")
-    except Exception as e:
-        print(f"Error in live stream for {stream_id}: {e}")
-    finally:
-        print(f"Closing WebSocket for stream {stream_id}")
-        try:
-            await ws.close()
-        except:
-            pass
-        if ws in clients[stream_id]:
-            clients[stream_id].remove(ws)
-        await _cancel_pubsub_task_if_needed(stream_id)
-
-
-async def _pubsub_handler(stream_id: str):
-    channel_name = f"onionstream:stream:{stream_id}"
-
-    print(f"Started Redis pubsub listener for stream: {stream_id}")
-
-    pubsub = redis.pubsub()
-    await pubsub.subscribe(channel_name)
-
-    try:
-        while True:
-            if not clients[stream_id]:
-                print(f"No clients left for stream {stream_id}, exiting pubsub loop")
-                break
-
-            try:
-                message = await pubsub.get_message(timeout=1.0)
-
-                if message is not None and message["type"] == "message":
-                    frame_data = message["data"]
-
-                    # Send to all connected clients
-                    disconnected = []
-                    for ws in clients[stream_id]:
-                        try:
-                            await asyncio.wait_for(
-                                ws.send_bytes(frame_data), timeout=0.1
-                            )
-                        except asyncio.TimeoutError:
-                            print(f"Client send timeout for stream {stream_id}")
-                            disconnected.append(ws)
-                        except Exception as e:
-                            print(
-                                f"Error sending to client for stream {stream_id}: {e}"
-                            )
-                            disconnected.append(ws)
-
-                    # Remove disconnected clients
-                    for ws in disconnected:
-                        if ws in clients[stream_id]:
-                            clients[stream_id].remove(ws)
-
-            except Exception as e:
-                print(f"Error reading from Redis pubsub {stream_id}: {e}")
-                await asyncio.sleep(1)
-                continue
-
-            await asyncio.sleep(0.001)  # Small delay to prevent tight loop
-
-    except asyncio.CancelledError:
-        print(f"Stopping Redis pubsub listener for stream: {stream_id}")
-    except Exception as e:
-        print(f"Error in Redis pubsub handler {stream_id}: {e}")
-    finally:
-        await pubsub.unsubscribe(channel_name)
-        await pubsub.close()
-
-
-async def _create_pubsub_task_if_needed(stream_id: str):
-    if stream_id not in pubsub_tasks:
-        task = asyncio.create_task(_pubsub_handler(stream_id))
-        pubsub_tasks[stream_id] = task
-
-
-async def _cancel_pubsub_task_if_needed(stream_id: str):
-    if stream_id in pubsub_tasks and not clients[stream_id]:
-        task = pubsub_tasks[stream_id]
-        if task:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            del pubsub_tasks[stream_id]
-            print(f"Cancelled pubsub task for stream {stream_id}")
+    broker = StreamBroker.get(stream_id)
+    async with broker as context:
+        nal = await context.next_nal()
+        ws.send_bytes(nal)
