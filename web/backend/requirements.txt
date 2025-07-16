@@ -1,5 +1,6 @@
 uvloop
 fastapi
 uvicorn
+pydantic
 websockets
 redis[hiredis]
