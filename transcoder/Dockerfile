@@ -15,11 +15,11 @@ RUN git clone https://github.com/sewenew/redis-plus-plus && \
     make && make install
 
 RUN mkdir -p /demo && \
-    curl -L https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4 -o /demo/bigbuckbunny.mp4
+    curl -L https://download.blender.org/peach/bigbuckbunny_movies/big_buck_bunny_480p_stereo.avi -o /demo/bigbuckbunny.avi
 
 WORKDIR /app
 COPY main.cpp /app
-RUN g++ -std=c++17 main.cpp -lavformat -lavcodec -lavutil -lhiredis -lredis++ -o transcoder
+RUN g++ -std=c++17 main.cpp -lavformat -lavcodec -lavutil -lswscale -lhiredis -lredis++ -o transcoder
 
 # FROM alpine:edge
 # COPY --from=builder /app/transcoder /usr/local/bin/transcoder

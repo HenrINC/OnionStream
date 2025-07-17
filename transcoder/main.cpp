@@ -10,6 +10,7 @@ extern "C"
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/avutil.h>
+#include <libswscale/swscale.h>
 }
 
 using namespace sw::redis;
@@ -106,7 +107,7 @@ int main()
     redis.sadd("onionstream:streams", stream_name);
     // std::cout << "Stream registered" << std::endl;
 
-    const std::string filepath = "/demo/bigbuckbunny.mp4";
+    const std::string filepath = "/demo/bigbuckbunny.avi";
 
     while (true)
     {
@@ -161,8 +162,21 @@ int main()
         }
 
         AVCodecContext *encoder_ctx = avcodec_alloc_context3(encoder);
-        encoder_ctx->width = decoder_ctx->width;
-        encoder_ctx->height = decoder_ctx->height;
+
+        // Ensure width is even for H.264 compatibility
+        int target_width = decoder_ctx->width;
+        int target_height = decoder_ctx->height;
+        if (target_width % 2 != 0)
+        {
+            target_width = (target_width + 1) & ~1; // Round up to nearest even number
+        }
+        if (target_height % 2 != 0)
+        {
+            target_height = (target_height + 1) & ~1; // Round up to nearest even number
+        }
+
+        encoder_ctx->width = target_width;
+        encoder_ctx->height = target_height;
         encoder_ctx->time_base = fmt_ctx->streams[video_stream_index]->time_base;
         encoder_ctx->framerate = fmt_ctx->streams[video_stream_index]->avg_frame_rate;
         encoder_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
@@ -191,6 +205,24 @@ int main()
         resampled_frame->format = encoder_ctx->pix_fmt;
         av_frame_get_buffer(resampled_frame, 0);
 
+        // Set up scaling context for format conversion and rescaling
+        SwsContext *sws_ctx = sws_getContext(
+            decoder_ctx->width, decoder_ctx->height, decoder_ctx->pix_fmt,
+            encoder_ctx->width, encoder_ctx->height, encoder_ctx->pix_fmt,
+            SWS_BILINEAR, nullptr, nullptr, nullptr);
+
+        if (!sws_ctx)
+        {
+            std::cerr << "Failed to create scaling context" << std::endl;
+            av_frame_free(&frame);
+            av_frame_free(&resampled_frame);
+            av_packet_free(&pkt);
+            avcodec_free_context(&decoder_ctx);
+            avcodec_free_context(&encoder_ctx);
+            avformat_close_input(&fmt_ctx);
+            continue;
+        }
+
         while (av_read_frame(fmt_ctx, pkt) >= 0)
         {
             if (pkt->stream_index == video_stream_index)
@@ -215,8 +247,20 @@ int main()
                         break;
                     }
 
-                    // Copy frame data (in a real implementation, you might want to use sws_scale for format conversion)
-                    av_frame_copy(resampled_frame, frame);
+                    // Scale/convert frame data using sws_scale
+                    int ret_scale = sws_scale(
+                        sws_ctx,
+                        frame->data, frame->linesize,
+                        0, decoder_ctx->height,
+                        resampled_frame->data, resampled_frame->linesize);
+
+                    if (ret_scale < 0)
+                    {
+                        std::cerr << "Error scaling frame" << std::endl;
+                        break;
+                    }
+
+                    // Copy timing properties
                     av_frame_copy_props(resampled_frame, frame);
 
                     // Re-encode the frame
@@ -264,6 +308,7 @@ int main()
         av_frame_free(&frame);
         av_frame_free(&resampled_frame);
         av_packet_free(&pkt);
+        sws_freeContext(sws_ctx);
         avcodec_free_context(&decoder_ctx);
         avcodec_free_context(&encoder_ctx);
         avformat_close_input(&fmt_ctx);
