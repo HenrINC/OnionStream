@@ -31,11 +31,11 @@ services:
       - intranet
     restart: unless-stopped
 
-  transcoder:
+  transcoder-cpp:
     build:
-      context: ./transcoder
+      context: ./transcoder-cpp
       dockerfile: Dockerfile
-    container_name: onionstream-transcoder
+    container_name: onionstream-transcoder-cpp
     environment:
       - REDIS_URL=redis://redis:6379
     networks:

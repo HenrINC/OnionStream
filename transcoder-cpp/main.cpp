@@ -180,7 +180,7 @@ int main()
         encoder_ctx->time_base = fmt_ctx->streams[video_stream_index]->time_base;
         encoder_ctx->framerate = fmt_ctx->streams[video_stream_index]->avg_frame_rate;
         encoder_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-        encoder_ctx->bit_rate = 2000000;                 // 2 Mbps
+        encoder_ctx->bit_rate = 1000000;                 // 1 Mbps
         encoder_ctx->gop_size = 30;                      // GOP size
         encoder_ctx->max_b_frames = 0;                   // No B-frames!
         encoder_ctx->profile = FF_PROFILE_H264_BASELINE; // Baseline profile doesn't support B-frames
@@ -191,6 +191,8 @@ int main()
         av_dict_set(&encoder_opts, "tune", "zerolatency", 0);
         av_dict_set(&encoder_opts, "profile", "baseline", 0);
         av_dict_set(&encoder_opts, "annexb", "1", 0); // Force Annex B output
+        // av_dict_set(&encoder_opts, "slice-min-size", "65536", 0);  // 64KB min slice size
+        // av_dict_set(&encoder_opts, "slice-max-size", "524288", 0); // 512KB max slice size
 
         check(avcodec_open2(encoder_ctx, encoder, &encoder_opts), "Cannot open encoder");
         av_dict_free(&encoder_opts);
