@@ -10,8 +10,9 @@ RUN npm install --no-audit --no-fund && npm cache clean --force
 # Install esbuild globally
 RUN npm install -g esbuild
 
-# Create static output dir
+# Create static output dirs
 RUN mkdir -p /app/static/h264decoder
+RUN mkdir -p /app/static/opus-decoder
 
 # Bundle h264decoder for browser using esbuild
 RUN esbuild node_modules/h264decoder/dist/index.js \
@@ -19,6 +20,9 @@ RUN esbuild node_modules/h264decoder/dist/index.js \
     --format=iife \
     --global-name=H264DecoderModule \
     --outfile=/app/static/h264decoder/bundle.js
+
+# Copy opus-decoder files
+RUN cp node_modules/opus-decoder/dist/opus-decoder.min.js /app/static/opus-decoder/
 
 # Copy remaining static assets
 COPY frontend/index.html frontend/main.js frontend/debug.html /app/static/

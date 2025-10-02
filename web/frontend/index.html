@@ -32,9 +32,17 @@
 
     <canvas id="video" width="640" height="480"></canvas>
     <div id="status"></div>
+    <div id="audioStatus"></div>
+    <div style="margin: 10px;">
+        <label>
+            <input type="checkbox" id="audioEnabled" checked> Enable Audio
+        </label>
+        <button id="audioInit" onclick="initializeAudioManually()" style="margin-left: 10px;">Initialize Audio</button>
+    </div>
     <button id="reconnectBtn" onclick="manualReconnect()" style="display: none;">Reconnect</button>
 
     <script src="/static/h264decoder/bundle.js"></script>
+    <script src="/static/opus-decoder/opus-decoder.min.js"></script>
     <script>
         const canvas = document.getElementById("video");
         const ctx = canvas.getContext("2d");
@@ -46,6 +54,13 @@
 
         // Video decoder
         const decoder = new H264DecoderModule.H264Decoder();
+
+        // Audio decoder and context
+        let audioDecoder = null;
+        let audioContext = null;
+        let audioQueue = [];
+        let isAudioPlaying = false;
+        let nextPlayTime = 0;
 
         // Stream connection class
         class StreamConnection {
@@ -244,10 +259,107 @@
             }
         }
 
-        // Audio-specific message handler (placeholder for future implementation)
-        function handleAudioMessage(data) {
-            // TODO: Implement audio decoding and playback
-            console.log("Audio data received:", data.byteLength, "bytes");
+        // Initialize audio system
+        async function initializeAudio() {
+            try {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                if (!audioDecoder) {
+                    audioDecoder = new window["opus-decoder"].OpusDecoder();
+                    await audioDecoder.ready;
+                    console.log("Opus decoder initialized");
+                }
+
+                return true;
+            } catch (error) {
+                console.error("Failed to initialize audio:", error);
+                return false;
+            }
+        }
+
+        // Play audio buffer
+        function playAudioBuffer(channelData, sampleRate) {
+            if (!audioContext || !channelData || channelData.length === 0) {
+                return;
+            }
+
+            try {
+                const numberOfChannels = channelData.length;
+                const numberOfFrames = channelData[0].length;
+
+                const audioBuffer = audioContext.createBuffer(numberOfChannels, numberOfFrames, sampleRate);
+
+                // Copy channel data to audio buffer
+                for (let channel = 0; channel < numberOfChannels; channel++) {
+                    const channelBuffer = audioBuffer.getChannelData(channel);
+                    for (let i = 0; i < numberOfFrames; i++) {
+                        channelBuffer[i] = channelData[channel][i];
+                    }
+                }
+
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+
+                // Schedule playback to maintain proper timing
+                const currentTime = audioContext.currentTime;
+                if (nextPlayTime < currentTime) {
+                    nextPlayTime = currentTime;
+                }
+
+                source.start(nextPlayTime);
+                nextPlayTime += audioBuffer.duration;
+
+            } catch (error) {
+                console.error("Error playing audio buffer:", error);
+            }
+        }
+
+        // Audio-specific message handler
+        async function handleAudioMessage(data) {
+            // Check if audio is enabled
+            const audioEnabled = document.getElementById('audioEnabled');
+            if (!audioEnabled || !audioEnabled.checked) {
+                return;
+            }
+
+            if (!audioDecoder) {
+                const initialized = await initializeAudio();
+                if (!initialized) {
+                    updateAudioStatus("Failed to initialize audio decoder", true);
+                    return;
+                }
+                updateAudioStatus("Audio decoder initialized");
+            }
+
+            try {
+                // Resume audio context if it's suspended (required for some browsers)
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                    updateAudioStatus("Audio context resumed");
+                }
+
+                const opusFrame = new Uint8Array(data);
+
+                // Decode the Opus frame
+                const { channelData, samplesDecoded, sampleRate } = audioDecoder.decodeFrame(opusFrame);
+
+                if (samplesDecoded > 0 && channelData) {
+                    // Play the decoded audio
+                    playAudioBuffer(channelData, sampleRate);
+
+                    // Update status occasionally (not every frame to avoid spam)
+                    if (Math.random() < 0.01) { // 1% chance to update status
+                        updateAudioStatus(`Playing: ${samplesDecoded} samples at ${sampleRate}Hz`);
+                    }
+                }
+
+            } catch (error) {
+                console.error("Error decoding audio:", error);
+                updateAudioStatus(`Decoding error: ${error.message}`, true);
+            }
         }
 
         function showStatus(message, isError = false) {
@@ -370,24 +482,65 @@
                 }
             });
 
-            // TODO: Create audio stream connection when needed
-            // const audioStream = new StreamConnection(streamId, 'audio', {
-            //     maxReconnectAttempts: 10,
-            //     receiveTimeout: 3000,
-            //     onMessage: handleAudioMessage
-            // });
+            // Create audio stream connection
+            const audioStream = new StreamConnection(streamId, 'audio', {
+                maxReconnectAttempts: 10,
+                receiveTimeout: 3000,
+                onMessage: handleAudioMessage,
+                onStatusChange: (message, isError) => {
+                    updateAudioStatus(message, isError);
+                }
+            });
 
             streams.set('video', videoStream);
-            // streams.set('audio', audioStream);
+            streams.set('audio', audioStream);
 
             // Connect to streams
             videoStream.connect(isReconnect);
-            // audioStream.connect(isReconnect);
+            audioStream.connect(isReconnect);
         }
 
         function manualReconnect() {
             if (currentStreamId) {
                 connectToStream(currentStreamId);
+            }
+        }
+
+        // Manual audio initialization (for user gesture requirement)
+        async function initializeAudioManually() {
+            const success = await initializeAudio();
+            const audioStatus = document.getElementById('audioStatus');
+            if (audioStatus) {
+                audioStatus.textContent = success ? 'Audio initialized successfully' : 'Failed to initialize audio';
+                audioStatus.style.color = success ? 'green' : 'red';
+            }
+        }
+
+        // Update audio status
+        function updateAudioStatus(message, isError = false) {
+            const audioStatus = document.getElementById('audioStatus');
+            if (audioStatus) {
+                audioStatus.textContent = `[AUDIO] ${message}`;
+                audioStatus.style.color = isError ? 'red' : 'green';
+            }
+        }
+
+        // Cleanup audio resources
+        async function cleanupAudio() {
+            try {
+                if (audioDecoder) {
+                    await audioDecoder.free();
+                    audioDecoder = null;
+                }
+                if (audioContext && audioContext.state !== 'closed') {
+                    await audioContext.close();
+                    audioContext = null;
+                }
+                audioQueue = [];
+                nextPlayTime = 0;
+                updateAudioStatus("Audio resources cleaned up");
+            } catch (error) {
+                console.error("Error cleaning up audio:", error);
             }
         }
 
@@ -397,6 +550,21 @@
             streams.clear();
 
             connectToStream(e.target.value);
+        });
+
+        // Audio control event listeners
+        document.getElementById("audioEnabled").addEventListener("change", (e) => {
+            if (!e.target.checked) {
+                updateAudioStatus("Audio disabled");
+            } else {
+                updateAudioStatus("Audio enabled - waiting for data");
+            }
+        });
+
+        // Cleanup on page unload
+        window.addEventListener("beforeunload", () => {
+            cleanupAudio();
+            streams.forEach(stream => stream.disconnect());
         });
 
         fetchStreams();
