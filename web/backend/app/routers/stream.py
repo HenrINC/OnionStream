@@ -120,8 +120,7 @@ class StreamBroker:
             if len(self.queues) == 0:
                 await self._initialize()
                 logger.info(f"Initialized stream broker for {self.stream_id}")
-            # Reduced queue size for lower latency (1 second at 30fps)
-            queue = asyncio.Queue(maxsize=30)
+            queue = asyncio.Queue(maxsize=3)
             self.queues.append(queue)
             logger.debug(
                 f"Added queue for stream {self.stream_id}, total queues: {len(self.queues)}"

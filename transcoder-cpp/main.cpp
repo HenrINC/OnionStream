@@ -180,17 +180,26 @@ int main()
         encoder_ctx->time_base = fmt_ctx->streams[video_stream_index]->time_base;
         encoder_ctx->framerate = fmt_ctx->streams[video_stream_index]->avg_frame_rate;
         encoder_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-        encoder_ctx->bit_rate = 1000000;                 // 1 Mbps
+        // Remove fixed bitrate - using CRF for variable bitrate with consistent quality
+        // encoder_ctx->bit_rate = 750000;              // Removed: using CRF instead
         encoder_ctx->gop_size = 30;                      // GOP size
         encoder_ctx->max_b_frames = 0;                   // No B-frames!
         encoder_ctx->profile = AV_PROFILE_H264_BASELINE; // Baseline profile doesn't support B-frames
 
-        // Additional encoder options for low latency and Annex B output
+        // Optimized encoder options: CRF for quality-based encoding
         AVDictionary *encoder_opts = nullptr;
-        av_dict_set(&encoder_opts, "preset", "ultrafast", 0);
-        av_dict_set(&encoder_opts, "tune", "zerolatency", 0);
-        av_dict_set(&encoder_opts, "profile", "baseline", 0);
-        av_dict_set(&encoder_opts, "annexb", "1", 0); // Force Annex B output
+        av_dict_set(&encoder_opts, "preset", "fast", 0);      // Much better compression, still under 100ms
+        av_dict_set(&encoder_opts, "tune", "zerolatency", 0); // Keep low latency
+        av_dict_set(&encoder_opts, "profile", "baseline", 0); // Ancient client compatibility
+        av_dict_set(&encoder_opts, "level", "3.0", 0);        // Safe level for old hardware
+        av_dict_set(&encoder_opts, "crf", "28", 0);           // Quality target (18-28 range, 28=good for streaming)
+        av_dict_set(&encoder_opts, "maxrate", "1200k", 0);    // Soft cap to prevent bandwidth spikes
+        av_dict_set(&encoder_opts, "bufsize", "2400k", 0);    // Buffer size (2x maxrate)
+        av_dict_set(&encoder_opts, "annexb", "1", 0);         // Force Annex B output
+        av_dict_set(&encoder_opts, "refs", "1", 0);           // Single reference frame (easier decode)
+        av_dict_set(&encoder_opts, "me_method", "hex", 0);    // Good motion estimation without being too slow
+        av_dict_set(&encoder_opts, "subq", "6", 0);           // Good subpixel motion estimation
+        av_dict_set(&encoder_opts, "trellis", "1", 0);        // Enable trellis quantization (better compression)
         // av_dict_set(&encoder_opts, "slice-min-size", "65536", 0);  // 64KB min slice size
         // av_dict_set(&encoder_opts, "slice-max-size", "524288", 0); // 512KB max slice size
 
