@@ -183,7 +183,7 @@ int main()
         encoder_ctx->bit_rate = 1000000;                 // 1 Mbps
         encoder_ctx->gop_size = 30;                      // GOP size
         encoder_ctx->max_b_frames = 0;                   // No B-frames!
-        encoder_ctx->profile = FF_PROFILE_H264_BASELINE; // Baseline profile doesn't support B-frames
+        encoder_ctx->profile = AV_PROFILE_H264_BASELINE; // Baseline profile doesn't support B-frames
 
         // Additional encoder options for low latency and Annex B output
         AVDictionary *encoder_opts = nullptr;
@@ -225,7 +225,8 @@ int main()
             continue;
         }
 
-        while (av_read_frame(fmt_ctx, pkt) >= 0)
+        bool processing_error = false;
+        while (av_read_frame(fmt_ctx, pkt) >= 0 && !processing_error)
         {
             if (pkt->stream_index == video_stream_index)
             {
@@ -259,6 +260,7 @@ int main()
                     if (ret_scale < 0)
                     {
                         std::cerr << "Error scaling frame" << std::endl;
+                        processing_error = true;
                         break;
                     }
 
@@ -270,6 +272,7 @@ int main()
                     if (ret < 0)
                     {
                         std::cerr << "Error sending frame to encoder" << std::endl;
+                        processing_error = true;
                         break;
                     }
 
@@ -283,6 +286,7 @@ int main()
                         else if (ret < 0)
                         {
                             std::cerr << "Error receiving packet from encoder" << std::endl;
+                            processing_error = true;
                             break;
                         }
 
@@ -296,8 +300,9 @@ int main()
                         // Publish to Redis Pub/Sub channel
                         redis.publish(stream_key, nal);
                         // std::cout << "Published " << frame_type << " of size " << encoded_pkt->size << " to channel: " << stream_key << std::endl;
-                        av_packet_free(&encoded_pkt);
-                        encoded_pkt = av_packet_alloc();
+
+                        // Unref the packet to reset it for reuse
+                        av_packet_unref(encoded_pkt);
                     }
                     av_packet_free(&encoded_pkt);
                 }
