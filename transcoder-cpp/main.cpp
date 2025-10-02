@@ -10,7 +10,10 @@ extern "C"
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/avutil.h>
+#include <libavutil/opt.h>
+#include <libavutil/channel_layout.h>
 #include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
 }
 
 using namespace sw::redis;
@@ -101,7 +104,7 @@ int main()
     Redis redis(redis_url ? redis_url : "redis://localhost:6379");
 
     std::string stream_name = "bigbuckbunny";
-    std::string stream_key = "onionstream:stream:" + stream_name;
+    std::string stream_prefix = "onionstream:stream:" + stream_name + ":";
 
     // std::cout << "Registering stream" << std::endl;
     redis.sadd("onionstream:streams", stream_name);
@@ -127,12 +130,16 @@ int main()
         }
 
         int video_stream_index = -1;
+        int audio_stream_index = -1;
         for (unsigned i = 0; i < fmt_ctx->nb_streams; ++i)
         {
             if (fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
             {
                 video_stream_index = i;
-                break;
+            }
+            else if (fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+            {
+                audio_stream_index = i;
             }
         }
 
@@ -206,15 +213,70 @@ int main()
         check(avcodec_open2(encoder_ctx, encoder, &encoder_opts), "Cannot open encoder");
         av_dict_free(&encoder_opts);
 
+        // Audio decoder and encoder setup
+        AVCodecContext *audio_decoder_ctx = nullptr;
+        AVCodecContext *audio_encoder_ctx = nullptr;
+        SwrContext *swr_ctx = nullptr;
+
+        if (audio_stream_index != -1)
+        {
+            AVCodecParameters *audio_codecpar = fmt_ctx->streams[audio_stream_index]->codecpar;
+
+            // Set up audio decoder
+            const AVCodec *audio_decoder = avcodec_find_decoder(audio_codecpar->codec_id);
+            if (audio_decoder)
+            {
+                audio_decoder_ctx = avcodec_alloc_context3(audio_decoder);
+                avcodec_parameters_to_context(audio_decoder_ctx, audio_codecpar);
+                check(avcodec_open2(audio_decoder_ctx, audio_decoder, nullptr), "Cannot open audio decoder");
+
+                // Set up Opus encoder
+                const AVCodec *opus_encoder = avcodec_find_encoder(AV_CODEC_ID_OPUS);
+                if (opus_encoder)
+                {
+                    audio_encoder_ctx = avcodec_alloc_context3(opus_encoder);
+                    audio_encoder_ctx->sample_rate = 48000;                      // Opus standard sample rate
+                    av_channel_layout_default(&audio_encoder_ctx->ch_layout, 2); // Stereo
+                    audio_encoder_ctx->sample_fmt = AV_SAMPLE_FMT_S16;           // Opus encoder expects S16
+                    audio_encoder_ctx->bit_rate = 128000;                        // 128 kbps
+                    audio_encoder_ctx->time_base = {1, audio_encoder_ctx->sample_rate};
+
+                    check(avcodec_open2(audio_encoder_ctx, opus_encoder, nullptr), "Cannot open Opus encoder");
+
+                    // Set up resampling context
+                    swr_ctx = swr_alloc();
+                    av_opt_set_chlayout(swr_ctx, "in_chlayout", &audio_decoder_ctx->ch_layout, 0);
+                    av_opt_set_chlayout(swr_ctx, "out_chlayout", &audio_encoder_ctx->ch_layout, 0);
+                    av_opt_set_int(swr_ctx, "in_sample_rate", audio_decoder_ctx->sample_rate, 0);
+                    av_opt_set_int(swr_ctx, "out_sample_rate", audio_encoder_ctx->sample_rate, 0);
+                    av_opt_set_sample_fmt(swr_ctx, "in_sample_fmt", audio_decoder_ctx->sample_fmt, 0);
+                    av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt", audio_encoder_ctx->sample_fmt, 0);
+                    swr_init(swr_ctx);
+                }
+            }
+        }
+
         AVPacket *pkt = av_packet_alloc();
         AVFrame *frame = av_frame_alloc();
         AVFrame *resampled_frame = av_frame_alloc();
+        AVFrame *audio_frame = av_frame_alloc();
+        AVFrame *resampled_audio_frame = av_frame_alloc();
 
         // Set up frame properties for encoder
         resampled_frame->width = encoder_ctx->width;
         resampled_frame->height = encoder_ctx->height;
         resampled_frame->format = encoder_ctx->pix_fmt;
         av_frame_get_buffer(resampled_frame, 0);
+
+        // Set up audio frame properties for Opus encoder
+        if (audio_encoder_ctx)
+        {
+            resampled_audio_frame->sample_rate = audio_encoder_ctx->sample_rate;
+            av_channel_layout_copy(&resampled_audio_frame->ch_layout, &audio_encoder_ctx->ch_layout);
+            resampled_audio_frame->format = audio_encoder_ctx->sample_fmt;
+            resampled_audio_frame->nb_samples = audio_encoder_ctx->frame_size;
+            av_frame_get_buffer(resampled_audio_frame, 0);
+        }
 
         // Set up scaling context for format conversion and rescaling
         SwsContext *sws_ctx = sws_getContext(
@@ -243,11 +305,11 @@ int main()
         {
             if (pkt->stream_index == video_stream_index)
             {
-                // Decode the packet
+                // Video processing (existing code)
                 int ret = avcodec_send_packet(decoder_ctx, pkt);
                 if (ret < 0)
                 {
-                    std::cerr << "Error sending packet to decoder" << std::endl;
+                    std::cerr << "Error sending video packet to decoder" << std::endl;
                     av_packet_unref(pkt);
                     continue;
                 }
@@ -304,14 +366,14 @@ int main()
                         }
 
                         // The encoder should now output in Annex B format directly
-                        parse_nal(encoded_pkt->data, encoded_pkt->size);
+                        // parse_nal(encoded_pkt->data, encoded_pkt->size);
                         std::string nal(reinterpret_cast<char *>(encoded_pkt->data), encoded_pkt->size);
 
                         // Determine frame type for logging
                         std::string frame_type = (encoded_pkt->flags & AV_PKT_FLAG_KEY) ? "keyframe" : "frame";
 
                         // Publish to Redis Pub/Sub channel
-                        redis.publish(stream_key, nal);
+                        redis.publish((stream_prefix + "video"), nal);
                         // std::cout << "Published " << frame_type << " of size " << encoded_pkt->size << " to channel: " << stream_key << std::endl;
 
                         // Unref the packet to reset it for reuse
@@ -348,15 +410,92 @@ int main()
                     last_stats = current_time;
                 }
             }
+            else if (pkt->stream_index == audio_stream_index && audio_decoder_ctx && audio_encoder_ctx)
+            {
+                // Audio processing
+                int ret = avcodec_send_packet(audio_decoder_ctx, pkt);
+                if (ret < 0)
+                {
+                    std::cerr << "Error sending audio packet to decoder" << std::endl;
+                    av_packet_unref(pkt);
+                    continue;
+                }
+
+                while (ret >= 0)
+                {
+                    ret = avcodec_receive_frame(audio_decoder_ctx, audio_frame);
+                    if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+                        break;
+                    else if (ret < 0)
+                    {
+                        std::cerr << "Error receiving audio frame from decoder" << std::endl;
+                        break;
+                    }
+
+                    // Resample audio
+                    if (swr_ctx)
+                    {
+                        int out_samples = swr_convert(swr_ctx,
+                                                      resampled_audio_frame->data, resampled_audio_frame->nb_samples,
+                                                      (const uint8_t **)audio_frame->data, audio_frame->nb_samples);
+
+                        if (out_samples < 0)
+                        {
+                            std::cerr << "Error resampling audio" << std::endl;
+                            break;
+                        }
+
+                        resampled_audio_frame->nb_samples = out_samples;
+                        resampled_audio_frame->pts = audio_frame->pts;
+                    }
+
+                    // Encode audio to Opus
+                    ret = avcodec_send_frame(audio_encoder_ctx, resampled_audio_frame);
+                    if (ret < 0)
+                    {
+                        std::cerr << "Error sending audio frame to encoder" << std::endl;
+                        break;
+                    }
+
+                    AVPacket *encoded_audio_pkt = av_packet_alloc();
+
+                    while (ret >= 0)
+                    {
+                        ret = avcodec_receive_packet(audio_encoder_ctx, encoded_audio_pkt);
+                        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+                            break;
+                        else if (ret < 0)
+                        {
+                            std::cerr << "Error receiving audio packet from encoder" << std::endl;
+                            break;
+                        }
+
+                        // Publish Opus audio data to Redis
+                        std::string opus_data(reinterpret_cast<char *>(encoded_audio_pkt->data), encoded_audio_pkt->size);
+                        redis.publish((stream_prefix + "audio"), opus_data);
+
+                        av_packet_free(&encoded_audio_pkt);
+                        encoded_audio_pkt = av_packet_alloc();
+                    }
+                    av_packet_free(&encoded_audio_pkt);
+                }
+            }
             av_packet_unref(pkt);
         }
-
         av_frame_free(&frame);
         av_frame_free(&resampled_frame);
+        av_frame_free(&audio_frame);
+        av_frame_free(&resampled_audio_frame);
         av_packet_free(&pkt);
         sws_freeContext(sws_ctx);
+        if (swr_ctx)
+            swr_free(&swr_ctx);
         avcodec_free_context(&decoder_ctx);
         avcodec_free_context(&encoder_ctx);
+        if (audio_decoder_ctx)
+            avcodec_free_context(&audio_decoder_ctx);
+        if (audio_encoder_ctx)
+            avcodec_free_context(&audio_encoder_ctx);
         avformat_close_input(&fmt_ctx);
 
         std::this_thread::sleep_for(std::chrono::milliseconds(500));

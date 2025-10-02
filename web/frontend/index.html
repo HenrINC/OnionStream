@@ -210,7 +210,7 @@
             }
 
             const host = window.location.hostname;
-            const url = `ws://${host}/stream/live/${streamId}`;
+            const url = `ws://${host}/stream/live/${streamId}/video`;
             console.log("Connecting to stream:", url);
 
             ws = new WebSocket(url);

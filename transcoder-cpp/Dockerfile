@@ -19,7 +19,7 @@ RUN mkdir -p /demo && \
 
 WORKDIR /app
 COPY main.cpp /app
-RUN g++ -std=c++17 main.cpp -lavformat -lavcodec -lavutil -lswscale -lhiredis -lredis++ -o transcoder
+RUN g++ -std=c++17 main.cpp -lavformat -lavcodec -lavutil -lswscale -lswresample -lhiredis -lredis++ -o transcoder
 
 # FROM alpine:edge
 # COPY --from=builder /app/transcoder /usr/local/bin/transcoder

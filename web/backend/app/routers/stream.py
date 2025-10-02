@@ -2,7 +2,9 @@ import os
 import asyncio
 import logging
 
+from typing import Literal, TypeVar
 from contextlib import asynccontextmanager
+
 from redis import asyncio as aioredis
 
 from fastapi.routing import APIRouter
@@ -17,25 +19,34 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+AUDIO_STREAM_TYPE = "audio"
+VIDEO_STREAM_TYPE = "video"
+
+StreamType = TypeVar(
+    name="StreamType", bound=Literal[f"{AUDIO_STREAM_TYPE}", f"{VIDEO_STREAM_TYPE}"]
+)
+
 
 class StreamBroker:
     __instances__: dict[str, "StreamBroker"] = {}
 
     @classmethod
-    def get(cls, stream_id: str) -> "StreamBroker":
-        if stream_id not in cls.__instances__:
-            cls.__instances__[stream_id] = cls(stream_id)
-        return cls.__instances__[stream_id]
+    def get(cls, stream_id: str, stream_type: StreamType) -> "StreamBroker":
+        stream_key = f"{stream_id}:{stream_type}"
+        if stream_key not in cls.__instances__:
+            cls.__instances__[stream_key] = cls(stream_id, stream_type)
+        return cls.__instances__[stream_key]
 
-    def __init__(self, stream_id: str):
+    def __init__(self, stream_id: str, stream_type: StreamType):
         self.stream_id = stream_id
+        self.stream_type = stream_type
         self.task: asyncio.Task | None = None
         self.queues: list[asyncio.Queue] = []
         self._lock = asyncio.Lock()
 
     @property
     def _channel_name(self) -> str:
-        return f"onionstream:stream:{self.stream_id}"
+        return f"onionstream:stream:{self.stream_id}:{self.stream_type}"
 
     async def _main_loop(self):
         pubsub = redis.pubsub()
@@ -148,25 +159,25 @@ async def stream_list() -> list[str]:
     return [i.decode() for i in streams]
 
 
-@router.websocket("/live/{stream_id}")
-async def live_stream(ws: WebSocket, stream_id: str):
+@router.websocket("/live/{stream_id}/{stream_type}")
+async def live_stream(ws: WebSocket, stream_id: str, stream_type: StreamType):
     await ws.accept()
-    broker = StreamBroker.get(stream_id)
+    broker = StreamBroker.get(stream_id, stream_type)
 
     try:
         async with broker.get_queue() as queue:
             while True:
                 try:
                     # Wait for frame data from the broker
-                    nal = await queue.get()
-                    await ws.send_bytes(nal)
+                    data = await queue.get()
+                    await ws.send_bytes(data)
                 except Exception as e:
                     logger.error(
-                        f"Error sending data to WebSocket for stream {stream_id}: {e}"
+                        f"Error sending data to WebSocket for stream {stream_id}:{stream_type}: {e}"
                     )
                     break
     except Exception as e:
-        logger.error(f"Error in live_stream for stream {stream_id}: {e}")
+        logger.error(f"Error in live_stream for stream {stream_id}:{stream_type}: {e}")
     finally:
         try:
             await ws.close()
