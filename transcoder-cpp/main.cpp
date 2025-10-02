@@ -226,6 +226,10 @@ int main()
         }
 
         bool processing_error = false;
+        auto start_time = std::chrono::high_resolution_clock::now();
+        int64_t frame_count = 0;
+        auto last_stats = start_time;
+
         while (av_read_frame(fmt_ctx, pkt) >= 0 && !processing_error)
         {
             if (pkt->stream_index == video_stream_index)
@@ -305,9 +309,35 @@ int main()
                         av_packet_unref(encoded_pkt);
                     }
                     av_packet_free(&encoded_pkt);
+
+                    frame_count++;
                 }
 
-                std::this_thread::sleep_for(std::chrono::milliseconds(33)); // simulate ~30 fps
+                // Proper frame timing based on actual video framerate
+                auto current_time = std::chrono::high_resolution_clock::now();
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - start_time);
+
+                // Calculate expected time for this frame number
+                double fps = av_q2d(fmt_ctx->streams[video_stream_index]->avg_frame_rate);
+                if (fps <= 0)
+                    fps = 30.0; // fallback
+
+                auto expected_time = std::chrono::milliseconds((int64_t)(frame_count * 1000.0 / fps));
+
+                if (elapsed < expected_time)
+                {
+                    auto sleep_time = expected_time - elapsed;
+                    std::this_thread::sleep_for(sleep_time);
+                }
+
+                // Print stats every 30 seconds
+                if (std::chrono::duration_cast<std::chrono::seconds>(current_time - last_stats).count() >= 30)
+                {
+                    double actual_fps = frame_count * 1000.0 / elapsed.count();
+                    std::cout << "Frames: " << frame_count << ", Target FPS: " << fps
+                              << ", Actual FPS: " << actual_fps << std::endl;
+                    last_stats = current_time;
+                }
             }
             av_packet_unref(pkt);
         }
