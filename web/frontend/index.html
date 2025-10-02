@@ -39,18 +39,216 @@
         const canvas = document.getElementById("video");
         const ctx = canvas.getContext("2d");
         let imageData = ctx.createImageData(canvas.width, canvas.height);
-        let ws = null;
-        let currentStreamId = null;
-        let reconnectAttempts = 0;
-        let maxReconnectAttempts = 10;
-        let reconnectDelay = 1000; // Start with 1 second
-        let reconnectTimer = null;
-        let isReconnecting = false;
-        let receiveTimeout = 3000; // 3 seconds timeout
-        let receiveTimer = null;
-        let lastReceiveTime = 0;
 
+        // Stream management
+        const streams = new Map(); // Store multiple stream connections
+        let currentStreamId = null;
+
+        // Video decoder
         const decoder = new H264DecoderModule.H264Decoder();
+
+        // Stream connection class
+        class StreamConnection {
+            constructor(streamId, streamType, options = {}) {
+                this.streamId = streamId;
+                this.streamType = streamType; // 'video', 'audio', etc.
+                this.ws = null;
+                this.reconnectAttempts = 0;
+                this.maxReconnectAttempts = options.maxReconnectAttempts || 10;
+                this.reconnectDelay = 1000;
+                this.reconnectTimer = null;
+                this.isReconnecting = false;
+                this.receiveTimeout = options.receiveTimeout || 3000;
+                this.receiveTimer = null;
+                this.lastReceiveTime = 0;
+                this.onMessage = options.onMessage || null;
+                this.onStatusChange = options.onStatusChange || null;
+            }
+
+            showStatus(message, isError = false) {
+                const statusElement = document.getElementById('status');
+                const reconnectBtn = document.getElementById('reconnectBtn');
+
+                if (statusElement) {
+                    statusElement.textContent = `[${this.streamType.toUpperCase()}] ${message}`;
+                    statusElement.style.color = isError ? 'red' : 'green';
+                }
+
+                // Show reconnect button if connection failed and we're not already reconnecting
+                if (isError && this.reconnectAttempts >= this.maxReconnectAttempts && reconnectBtn) {
+                    reconnectBtn.style.display = 'block';
+                } else if (reconnectBtn) {
+                    reconnectBtn.style.display = 'none';
+                }
+
+                if (this.onStatusChange) {
+                    this.onStatusChange(message, isError);
+                }
+            }
+
+            resetReconnectState() {
+                this.reconnectAttempts = 0;
+                this.reconnectDelay = 1000;
+                this.isReconnecting = false;
+                if (this.reconnectTimer) {
+                    clearTimeout(this.reconnectTimer);
+                    this.reconnectTimer = null;
+                }
+                if (this.receiveTimer) {
+                    clearTimeout(this.receiveTimer);
+                    this.receiveTimer = null;
+                }
+            }
+
+            startReceiveTimeout() {
+                if (this.receiveTimer) {
+                    clearTimeout(this.receiveTimer);
+                }
+
+                this.receiveTimer = setTimeout(() => {
+                    console.log(`[${this.streamType}] Receive timeout - no data received for`, this.receiveTimeout / 1000, "seconds");
+                    this.showStatus("No data received, reconnecting...", true);
+                    if (this.ws) {
+                        this.ws.close(1000, "Receive timeout");
+                    }
+                    this.scheduleReconnect();
+                }, this.receiveTimeout);
+            }
+
+            resetReceiveTimeout() {
+                this.lastReceiveTime = Date.now();
+                this.startReceiveTimeout();
+            }
+
+            scheduleReconnect() {
+                if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+                    this.showStatus(`Failed to reconnect after ${this.maxReconnectAttempts} attempts`, true);
+                    return;
+                }
+
+                if (this.isReconnecting) {
+                    return;
+                }
+
+                this.isReconnecting = true;
+                this.reconnectAttempts++;
+
+                this.showStatus(`Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`, true);
+
+                this.reconnectTimer = setTimeout(() => {
+                    this.connect(true);
+                }, this.reconnectDelay);
+
+                // Exponential backoff with jitter
+                this.reconnectDelay = Math.min(this.reconnectDelay * 2 + Math.random() * 1000, 30000);
+            }
+
+            connect(isReconnect = false) {
+                if (this.ws) {
+                    this.ws.close();
+                }
+
+                if (!isReconnect) {
+                    this.resetReconnectState();
+                }
+
+                const host = window.location.hostname;
+                const url = `ws://${host}/stream/live/${this.streamId}/${this.streamType}`;
+                console.log(`[${this.streamType}] Connecting to stream:`, url);
+
+                this.ws = new WebSocket(url);
+                this.ws.binaryType = "arraybuffer";
+
+                this.ws.onopen = () => {
+                    console.log(`[${this.streamType}] WebSocket connected`);
+                    this.resetReconnectState();
+                    this.showStatus("Connected to stream");
+                    this.startReceiveTimeout();
+                };
+
+                this.ws.onmessage = (event) => {
+                    this.resetReceiveTimeout();
+
+                    if (!(event.data instanceof ArrayBuffer)) {
+                        console.warn(`[${this.streamType}] Non-binary message received`);
+                        return;
+                    }
+
+                    if (this.onMessage) {
+                        this.onMessage(event.data);
+                    }
+                };
+
+                this.ws.onerror = (err) => {
+                    console.error(`[${this.streamType}] WebSocket error:`, err);
+                    if (!this.isReconnecting) {
+                        this.showStatus("Connection error", true);
+                    }
+                };
+
+                this.ws.onclose = (event) => {
+                    console.log(`[${this.streamType}] WebSocket closed:`, event.code, event.reason);
+
+                    // Clear receive timeout when connection closes
+                    if (this.receiveTimer) {
+                        clearTimeout(this.receiveTimer);
+                        this.receiveTimer = null;
+                    }
+
+                    // Check if this was an unexpected close (not user-initiated)
+                    if (event.code !== 1000 && event.code !== 1001 && !isReconnect) {
+                        this.showStatus("Connection lost, attempting to reconnect...", true);
+                        this.scheduleReconnect();
+                    } else if (event.code !== 1000 && event.code !== 1001 && isReconnect) {
+                        this.scheduleReconnect();
+                    } else {
+                        this.showStatus("Disconnected", true);
+                    }
+                };
+            }
+
+            disconnect() {
+                if (this.reconnectTimer) {
+                    clearTimeout(this.reconnectTimer);
+                    this.reconnectTimer = null;
+                }
+                if (this.receiveTimer) {
+                    clearTimeout(this.receiveTimer);
+                    this.receiveTimer = null;
+                }
+
+                if (this.ws) {
+                    this.ws.close(1000, "User disconnect");
+                    this.ws = null;
+                }
+
+                this.resetReconnectState();
+            }
+        }
+
+        // Video-specific message handler
+        function handleVideoMessage(data) {
+            const dataArray = new Uint8Array(data);
+            const result = decoder.decode(dataArray);
+
+            if (result === H264DecoderModule.H264Decoder.PIC_RDY) {
+                renderFrame();
+            } else if (result === H264DecoderModule.H264Decoder.ERROR) {
+                console.error("Decoder error");
+            } else if (result === H264DecoderModule.H264Decoder.PARAM_SET_ERROR) {
+                console.error("Parameter set error");
+            } else if (result === H264DecoderModule.H264Decoder.MEMALLOC_ERROR) {
+                console.error("Memory allocation error");
+            } else {
+                console.log("Decoder result:", result);
+            }
+        }
+
+        // Audio-specific message handler (placeholder for future implementation)
+        function handleAudioMessage(data) {
+            // TODO: Implement audio decoding and playback
+            console.log("Audio data received:", data.byteLength, "bytes");
+        }
 
         function showStatus(message, isError = false) {
             const statusElement = document.getElementById('status');
@@ -58,11 +256,11 @@
 
             if (statusElement) {
                 statusElement.textContent = message;
-                statusElement.style.color = isError ? 'red' : 'green';
+                statusElement.style.color = isError ? 'green' : 'red';
             }
 
-            // Show reconnect button if connection failed and we're not already reconnecting
-            if (isError && reconnectAttempts >= maxReconnectAttempts && reconnectBtn) {
+            // Show reconnect button if connection failed
+            if (isError && reconnectBtn) {
                 reconnectBtn.style.display = 'block';
             } else if (reconnectBtn) {
                 reconnectBtn.style.display = 'none';
@@ -70,62 +268,19 @@
         }
 
         function resetReconnectState() {
-            reconnectAttempts = 0;
-            reconnectDelay = 1000;
-            isReconnecting = false;
-            if (reconnectTimer) {
-                clearTimeout(reconnectTimer);
-                reconnectTimer = null;
-            }
-            if (receiveTimer) {
-                clearTimeout(receiveTimer);
-                receiveTimer = null;
-            }
+            // This function is now handled by individual StreamConnection instances
         }
 
         function startReceiveTimeout() {
-            if (receiveTimer) {
-                clearTimeout(receiveTimer);
-            }
-
-            receiveTimer = setTimeout(() => {
-                console.log("Receive timeout - no data received for", receiveTimeout / 1000, "seconds");
-                showStatus("No data received, reconnecting...", true);
-                if (ws) {
-                    ws.close(1000, "Receive timeout");
-                }
-                scheduleReconnect();
-            }, receiveTimeout);
+            // This function is now handled by individual StreamConnection instances
         }
 
         function resetReceiveTimeout() {
-            lastReceiveTime = Date.now();
-            startReceiveTimeout();
+            // This function is now handled by individual StreamConnection instances
         }
 
         function scheduleReconnect() {
-            if (reconnectAttempts >= maxReconnectAttempts) {
-                showStatus(`Failed to reconnect after ${maxReconnectAttempts} attempts`, true);
-                return;
-            }
-
-            if (isReconnecting) {
-                return;
-            }
-
-            isReconnecting = true;
-            reconnectAttempts++;
-
-            showStatus(`Reconnecting... (attempt ${reconnectAttempts}/${maxReconnectAttempts})`, true);
-
-            reconnectTimer = setTimeout(() => {
-                if (currentStreamId) {
-                    connectToStream(currentStreamId, true);
-                }
-            }, reconnectDelay);
-
-            // Exponential backoff with jitter
-            reconnectDelay = Math.min(reconnectDelay * 2 + Math.random() * 1000, 30000);
+            // This function is now handled by individual StreamConnection instances
         }
 
         function renderFrame() {
@@ -199,108 +354,47 @@
         }
 
         function connectToStream(streamId, isReconnect = false) {
-            if (ws) {
-                ws.close();
-            }
+            // Disconnect existing streams
+            streams.forEach(stream => stream.disconnect());
+            streams.clear();
 
             currentStreamId = streamId;
 
-            if (!isReconnect) {
-                resetReconnectState();
-            }
-
-            const host = window.location.hostname;
-            const url = `ws://${host}/stream/live/${streamId}/video`;
-            console.log("Connecting to stream:", url);
-
-            ws = new WebSocket(url);
-            ws.binaryType = "arraybuffer";
-
-            ws.onopen = () => {
-                console.log("WebSocket connected");
-                resetReconnectState();
-                showStatus("Connected to stream");
-                startReceiveTimeout(); // Start the receive timeout
-            };
-
-            ws.onmessage = (event) => {
-                resetReceiveTimeout(); // Reset timeout on each message
-
-                if (!(event.data instanceof ArrayBuffer)) {
-                    console.warn("Non-binary message received");
-                    return;
+            // Create video stream connection
+            const videoStream = new StreamConnection(streamId, 'video', {
+                maxReconnectAttempts: 10,
+                receiveTimeout: 3000,
+                onMessage: handleVideoMessage,
+                onStatusChange: (message, isError) => {
+                    // You can add custom status handling here
                 }
+            });
 
-                const data = new Uint8Array(event.data);
-                const result = decoder.decode(data);
+            // TODO: Create audio stream connection when needed
+            // const audioStream = new StreamConnection(streamId, 'audio', {
+            //     maxReconnectAttempts: 10,
+            //     receiveTimeout: 3000,
+            //     onMessage: handleAudioMessage
+            // });
 
-                if (result === H264DecoderModule.H264Decoder.PIC_RDY) {
-                    renderFrame();
-                } else if (result === H264DecoderModule.H264Decoder.ERROR) {
-                    console.error("Decoder error");
-                } else if (result === H264DecoderModule.H264Decoder.PARAM_SET_ERROR) {
-                    console.error("Parameter set error");
-                } else if (result === H264DecoderModule.H264Decoder.MEMALLOC_ERROR) {
-                    console.error("Memory allocation error");
-                } else {
-                    console.log("Decoder result:", result);
-                }
-            };
+            streams.set('video', videoStream);
+            // streams.set('audio', audioStream);
 
-            ws.onerror = (err) => {
-                console.error("WebSocket error:", err);
-                if (!isReconnecting) {
-                    showStatus("Connection error", true);
-                }
-            };
-
-            ws.onclose = (event) => {
-                console.log("WebSocket closed:", event.code, event.reason);
-
-                // Clear receive timeout when connection closes
-                if (receiveTimer) {
-                    clearTimeout(receiveTimer);
-                    receiveTimer = null;
-                }
-
-                // Check if this was an unexpected close (not user-initiated)
-                if (event.code !== 1000 && event.code !== 1001 && currentStreamId && !isReconnect) {
-                    showStatus("Connection lost, attempting to reconnect...", true);
-                    scheduleReconnect();
-                } else if (event.code !== 1000 && event.code !== 1001 && currentStreamId && isReconnect) {
-                    scheduleReconnect();
-                } else {
-                    showStatus("Disconnected", true);
-                }
-            };
+            // Connect to streams
+            videoStream.connect(isReconnect);
+            // audioStream.connect(isReconnect);
         }
 
         function manualReconnect() {
-            reconnectAttempts = 0;
-            reconnectDelay = 1000;
-            isReconnecting = false;
-
-            if (reconnectTimer) {
-                clearTimeout(reconnectTimer);
-                reconnectTimer = null;
-            }
-
             if (currentStreamId) {
                 connectToStream(currentStreamId);
             }
         }
 
         document.getElementById("streamSelect").addEventListener("change", (e) => {
-            // Clear any existing reconnection attempts when switching streams
-            if (reconnectTimer) {
-                clearTimeout(reconnectTimer);
-                reconnectTimer = null;
-            }
-            if (receiveTimer) {
-                clearTimeout(receiveTimer);
-                receiveTimer = null;
-            }
-            isReconnecting = false;
+            // Clear any existing streams when switching
+            streams.forEach(stream => stream.disconnect());
+            streams.clear();
 
             connectToStream(e.target.value);
         });
